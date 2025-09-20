@@ -1,0 +1,25 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: wilson
+    relative_path: urdf/wilson.urdf.xacro
+  srdf:
+    relative_path: config/wilson.srdf
+  package_settings:
+    author_name: Trace LaRue
+    author_email: traceglarue@gmail.com
+    generated_timestamp: 1756579073
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity

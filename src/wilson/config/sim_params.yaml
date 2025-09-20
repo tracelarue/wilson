@@ -1,0 +1,19 @@
+# Wilson Robot - Simulation Parameters
+# This file contains parameters specific to simulation environments
+
+/**:
+  ros__parameters:
+    # Simulation timing
+    use_sim_time: true
+    
+    # ROS2 Control configuration  
+    use_ros2_control: true
+    
+    # Hardware simulation
+    use_fake_hardware: true
+    
+    # Initial pose for AMCL localization (2D Pose Estimate)
+    initial_pose_x: 0.0      # meters
+    initial_pose_y: 0.0      # meters  
+    initial_pose_yaw: 0.0    # radians
+

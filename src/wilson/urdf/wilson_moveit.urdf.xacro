@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro"  name="wilson">
+    <xacro:arg name="prefix" default="" />
+    <xacro:arg name="use_sim_time" default="false" />
+    <xacro:arg name="use_fake_hardware" default="false" />
+    <xacro:arg name="fake_sensor_commands" default="false" />
+
+    <xacro:include filename="wilson_core.xacro" />
+    <xacro:include filename="end_effector.xacro" />
+    <xacro:include filename="wheels.xacro" />
+    <xacro:include filename="lidar.xacro" />
+    <xacro:include filename="camera.xacro" />
+    <xacro:include filename="depth_camera.xacro" />
+    <xacro:include filename="gazebo_references.xacro" />
+
+</robot>

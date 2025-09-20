@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro"  name="wilson">
+    <xacro:arg name="prefix" default="" />
+    <xacro:arg name="use_sim_time" default="false" />
+    <xacro:arg name="use_ros2_control" default="true" />
+    <xacro:arg name="use_fake_hardware" default="false" />
+    <xacro:arg name="fake_sensor_commands" default="false" />
+
+    <xacro:include filename="wilson_core.xacro" />
+    <xacro:include filename="end_effector.xacro" />
+    <xacro:include filename="wheels.xacro" />
+    <xacro:include filename="lidar.xacro" />
+    <xacro:include filename="camera.xacro" />
+    <xacro:include filename="depth_camera.xacro" />
+    <xacro:include filename="gazebo_references.xacro" />
+
+    <xacro:if value="$(arg use_ros2_control)">
+        <xacro:include filename="$(find wilson)/ros2_control/wilson_system.ros2_control.xacro" />
+        <xacro:wilson_system
+            name="wilson_system" prefix="$(arg prefix)" use_sim_time="$(arg use_sim_time)"
+            use_fake_hardware="$(arg use_fake_hardware)"
+            fake_sensor_commands="$(arg fake_sensor_commands)"/>
+
+        <gazebo>
+            <plugin name="gazebo_ros2_control" filename="libgazebo_ros2_control.so">
+            <parameters>$(find wilson)/config/gazebo_controller_manager.yaml</parameters>
+            </plugin>
+        </gazebo>
+    </xacro:if>
+
+
+</robot>

@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../ros-mcp-server"
+		},
+		{
+			"path": "../wilson"
+		}
+	]
+}

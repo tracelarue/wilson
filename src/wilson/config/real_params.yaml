@@ -1,0 +1,16 @@
+# Wilson Robot - Real Robot Parameters
+# This file contains parameters specific to real robot hardware
+
+/**:
+  ros__parameters:
+    # Real-time operation
+    use_sim_time: false
+    
+    # ROS2 Control configuration
+    use_ros2_control: true
+    
+    # Real hardware
+    use_fake_hardware: false
+    
+    # Gazebo not used in real robot
+    use_gazebo: false
