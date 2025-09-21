@@ -1,28 +1,46 @@
-"""
-## Documentation
-Quickstart: https://github.com/google-gemini/cookbook/blob/main/quickstarts/Get_started_LiveAPI.py
+# -*- coding: utf-8 -*-
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-## Setup
 
-To install the dependencies for this script, run:
-
-```
-pip install google-genai opencv-python pyaudio pillow mss
-```
-"""
-
-import os
 import asyncio
 import base64
 import io
+import os
+import sys
 import traceback
+
 import cv2
 import pyaudio
 import PIL.Image
 import mss
+
 import argparse
+from dotenv import load_dotenv
+
 from google import genai
 from google.genai import types
+
+from mcp_handler import MCPClient
+
+load_dotenv()
+
+if sys.version_info < (3, 11, 0):
+    import taskgroup, exceptiongroup
+
+    asyncio.TaskGroup = taskgroup.TaskGroup
+    asyncio.ExceptionGroup = exceptiongroup.ExceptionGroup
 
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
@@ -32,39 +50,13 @@ CHUNK_SIZE = 1024
 
 MODEL = "models/gemini-2.5-flash-live-preview"
 
-DEFAULT_MODE = "none"  # "camera" or "screen" or "none"
+DEFAULT_MODE = "none"
 
 client = genai.Client(
     http_options={"api_version": "v1beta"},
     api_key=os.environ.get("GOOGLE_API_KEY"),
 )
 
-tools = [
-    types.Tool(code_execution=types.ToolCodeExecution),
-    types.Tool(google_search=types.GoogleSearch()),
-    types.Tool(
-        function_declarations=[
-        ]
-    ),
-]
-
-CONFIG = types.LiveConnectConfig(
-    response_modalities=[
-        "TEXT", # TEXT or AUDIO
-    ],
-    media_resolution="MEDIA_RESOLUTION_MEDIUM",
-    speech_config=types.SpeechConfig(
-        language_code="en-US",
-        voice_config=types.VoiceConfig(
-            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Puck")
-        )
-    ),
-    context_window_compression=types.ContextWindowCompressionConfig(
-        trigger_tokens=25600,
-        sliding_window=types.SlidingWindow(target_tokens=12800),
-    ),
-    tools=tools,
-)
 
 pya = pyaudio.PyAudio()
 
@@ -81,22 +73,59 @@ class AudioLoop:
         self.send_text_task = None
         self.receive_audio_task = None
         self.play_audio_task = None
+        
+        self.mcp_client = MCPClient()
 
     async def send_text(self):
         while True:
             text = await asyncio.to_thread(
                 input,
-                "💬 message > ",
+                "🎤 message > ",
             )
             if text.lower() == "q":
                 break
-            await self.session.send_client_content(
-                turns=types.Content(
-                    role='user',
-                    parts=[types.Part(text=text or ".")]
-                ),
-                turn_complete=True
+
+            await self.session.send(input=text or ".", end_of_turn=True)
+            
+    def handle_server_content(self, server_content):
+        model_turn = server_content.model_turn
+        if model_turn:
+            for part in model_turn.parts:
+                executable_code = part.executable_code
+                if executable_code is not None:
+                    print('-------------------------------')
+                    print(f'``` python\n{executable_code.code}\n```')
+                    print('-------------------------------')
+
+                code_execution_result = part.code_execution_result
+                if code_execution_result is not None:
+                    print('-------------------------------')
+                    print(f'```\n{code_execution_result.output}\n```')
+                    print('-------------------------------')
+
+        grounding_metadata = getattr(server_content, 'grounding_metadata', None)
+        if grounding_metadata is not None:
+            print(grounding_metadata.search_entry_point.rendered_content)
+
+        return
+    
+    async def handle_tool_call(self, tool_call):
+        for fc in tool_call.function_calls:
+            result = await self.mcp_client.session.call_tool(
+                name=fc.name,
+                arguments=fc.args,
             )
+            print(result)
+            tool_response = types.LiveClientToolResponse(
+                function_responses=[types.FunctionResponse(
+                    name=fc.name,
+                    id=fc.id,
+                    response={'result':result},
+                )]
+            )
+
+            print('\n>>> ', tool_response)
+            await self.session.send(input=tool_response)
 
     def _get_frame(self, cap):
         # Read the frameq
@@ -169,10 +198,11 @@ class AudioLoop:
     async def send_realtime(self):
         while True:
             msg = await self.out_queue.get()
-            await self.session.send_realtime_input(media=msg)
+            await self.session.send(input=msg)
 
     async def listen_audio(self):
         mic_info = pya.get_default_input_device_info()
+        print('Microphone:', mic_info['name'])
         self.audio_stream = await asyncio.to_thread(
             pya.open,
             format=FORMAT,
@@ -194,16 +224,22 @@ class AudioLoop:
         "Background task to reads from the websocket and write pcm chunks to the output queue"
         while True:
             turn = self.session.receive()
-            first_response = True
             async for response in turn:
                 if data := response.data:
                     self.audio_in_queue.put_nowait(data)
                     continue
                 if text := response.text:
-                    if first_response:
-                        print("🤖 ", end="")
-                        first_response = False
+                    print("🤖 ", end="")
                     print(text, end="")
+                    
+                server_content = response.server_content
+                if server_content is not None:
+                    self.handle_server_content(server_content)
+                    continue
+
+                tool_call = response.tool_call
+                if tool_call is not None:
+                    await self.handle_tool_call(tool_call)
 
             # If you interrupt the model, it sends a turn_complete.
             # For interruptions to work, we need to stop playback.
@@ -211,10 +247,6 @@ class AudioLoop:
             # much more audio than has played yet.
             while not self.audio_in_queue.empty():
                 self.audio_in_queue.get_nowait()
-            
-            # Add a newline after the complete response
-            if not first_response:
-                print()
 
     async def play_audio(self):
         stream = await asyncio.to_thread(
@@ -229,6 +261,72 @@ class AudioLoop:
             await asyncio.to_thread(stream.write, bytestream)
 
     async def run(self):
+        await self.mcp_client.connect_to_server()
+        available_tools = await self.mcp_client.session.list_tools()
+
+        #for tool in available_tools.tools:
+        #    print('--------------------------------\n')
+        #    print(tool)
+        #    print('\n--------------------------------\n')
+
+        functional_tools = []
+        for tool in available_tools.tools:
+            tool_desc = {
+                    "name": tool.name,
+                    "description": tool.description
+                }
+            if tool.inputSchema["properties"]:
+                tool_desc["parameters"] = {
+                    "type": tool.inputSchema["type"],
+                    "properties": {},
+                }
+                for param in tool.inputSchema["properties"]:
+                    param_schema = tool.inputSchema["properties"][param]
+                    
+                    # Handle direct type or anyOf union types
+                    if "type" in param_schema:
+                        param_type = param_schema["type"]
+                    elif "anyOf" in param_schema:
+                        # For anyOf, use the first non-null type
+                        param_type = "string"  # default fallback
+                        for type_option in param_schema["anyOf"]:
+                            if type_option.get("type") != "null":
+                                param_type = type_option["type"]
+                                break
+                    else:
+                        param_type = "string"  # fallback default
+                    
+                    param_def = {
+                        "type": param_type,
+                        "description": "",
+                    }
+                    
+                    # Handle array types that need items field
+                    if param_type == "array" and "items" in param_schema:
+                        items_schema = param_schema["items"]
+                        if "type" in items_schema:
+                            param_def["items"] = {"type": items_schema["type"]}
+                        else:
+                            # Default to object for complex array items
+                            param_def["items"] = {"type": "object"}
+                    
+                    tool_desc["parameters"]["properties"][param] = param_def
+                
+            if "required" in tool.inputSchema:
+                tool_desc["parameters"]["required"] = tool.inputSchema["required"]
+                
+            functional_tools.append(tool_desc)
+        #print(functional_tools)
+        tools = [
+            {
+                'function_declarations': functional_tools,
+                'code_execution': {},
+                'google_search': {},
+                },
+        ]
+        
+        CONFIG = {"tools": tools, "response_modalities": ["AUDIO"]}
+        
         try:
             async with (
                 client.aio.live.connect(model=MODEL, config=CONFIG) as session,
@@ -255,7 +353,7 @@ class AudioLoop:
 
         except asyncio.CancelledError:
             pass
-        except ExceptionGroup as EG:
+        except asyncio.ExceptionGroup as EG:
             self.audio_stream.close()
             traceback.print_exception(EG)
 

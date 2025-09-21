@@ -212,5 +212,5 @@ def generate_launch_description():
         # Optional components (commented out)
         # gemini_process,
         rosbridge_timer,
-        claude_timer
+        #claude_timer
     ])
