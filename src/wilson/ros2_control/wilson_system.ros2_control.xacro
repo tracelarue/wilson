@@ -78,15 +78,6 @@ https://github.com/ros-controls/ros2_control_demos/blob/foxy/ros2_control_demo_d
         </xacro:if>
         <xacro:unless value="${use_fake_hardware}">
           <hardware>
-          <!--
-            <plugin>ros2_control_demo_example_1/RRBotSystemPositionOnlyHardware</plugin>
-            <param name="device">/dev/ttyUSB1</param>
-            <param name="baud_rate">57600</param>
-            <param name="timeout_ms">1000</param>
-            <param name="example_param_hw_start_duration_sec">0</param>
-            <param name="example_param_hw_stop_duration_sec">3.0</param>
-            <param name="example_param_hw_slowdown">100</param>
-            -->
             <plugin>arduinobot_controller/ArduinobotInterface</plugin>
             <param name="port">/dev/ttyUSB1</param>
           </hardware>

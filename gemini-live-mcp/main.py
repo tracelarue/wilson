@@ -325,8 +325,25 @@ class AudioLoop:
                 },
         ]
         
-        CONFIG = {"tools": tools, "response_modalities": ["AUDIO"]}
-        
+        CONFIG = types.LiveConnectConfig(
+        response_modalities=["AUDIO"],
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Charon")
+            )
+        ),
+        system_instruction = types.Content(
+            parts=[
+                types.Part(
+                    text="""When told to go to a location, use publish_once to publish to goal pose.
+                            Locations for /goal_pose are:
+                            - kitchen = {'position': {'x': -1.0, 'y': 3.0, 'z': 0.0}, 'orientation': {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0}}
+                        """
+                )
+            ]
+        ),
+        tools=tools,
+)
         try:
             async with (
                 client.aio.live.connect(model=MODEL, config=CONFIG) as session,

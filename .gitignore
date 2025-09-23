@@ -1,7 +1,8 @@
-# ROS Files
+# My Files
 log/
 build/
 install/
+wilson.code-workspace
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
