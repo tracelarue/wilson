@@ -86,26 +86,28 @@ class AudioLoop:
                 break
 
             await self.session.send(input=text or ".", end_of_turn=True)
+
             
     def handle_server_content(self, server_content):
         model_turn = server_content.model_turn
         if model_turn:
             for part in model_turn.parts:
                 executable_code = part.executable_code
-                if executable_code is not None:
-                    print('-------------------------------')
-                    print(f'``` python\n{executable_code.code}\n```')
-                    print('-------------------------------')
-
-                code_execution_result = part.code_execution_result
-                if code_execution_result is not None:
-                    print('-------------------------------')
-                    print(f'```\n{code_execution_result.output}\n```')
-                    print('-------------------------------')
+                # Print tool results
+                #if executable_code is not None:
+                #    print('-------------------------------')
+                #    print(f'``` python\n{executable_code.code}\n```')
+                #    print('-------------------------------')
+#
+                #code_execution_result = part.code_execution_result
+                #if code_execution_result is not None:
+                #    print('-------------------------------')
+                #    print(f'```\n{code_execution_result.output}\n```')
+                #    print('-------------------------------')
 
         grounding_metadata = getattr(server_content, 'grounding_metadata', None)
-        if grounding_metadata is not None:
-            print(grounding_metadata.search_entry_point.rendered_content)
+        #if grounding_metadata is not None:
+        #    print(grounding_metadata.search_entry_point.rendered_content)
 
         return
     
@@ -115,7 +117,7 @@ class AudioLoop:
                 name=fc.name,
                 arguments=fc.args,
             )
-            print(result)
+            # print(result)  # Uncomment to see raw tool call results from MCP server
             tool_response = types.LiveClientToolResponse(
                 function_responses=[types.FunctionResponse(
                     name=fc.name,
@@ -124,7 +126,7 @@ class AudioLoop:
                 )]
             )
 
-            print('\n>>> ', tool_response)
+            # print('\n>>> ', tool_response)  # Uncomment to see formatted tool response sent to Gemini
             await self.session.send(input=tool_response)
 
     def _get_frame(self, cap):
@@ -224,13 +226,20 @@ class AudioLoop:
         "Background task to reads from the websocket and write pcm chunks to the output queue"
         while True:
             turn = self.session.receive()
+            turn_text = ""
+            first_text = True
+            
             async for response in turn:
                 if data := response.data:
                     self.audio_in_queue.put_nowait(data)
                     continue
                 if text := response.text:
-                    print("🤖 ", end="")
-                    print(text, end="")
+                    if first_text:
+                        print(f"\n🤖 > {text}", end="", flush=True)
+                        first_text = False
+                    else:
+                        print(text, end="", flush=True)
+                    turn_text += text
                     
                 server_content = response.server_content
                 if server_content is not None:
@@ -240,6 +249,11 @@ class AudioLoop:
                 tool_call = response.tool_call
                 if tool_call is not None:
                     await self.handle_tool_call(tool_call)
+
+            # Print newline at end of turn if there was text
+            if turn_text:
+                print()  # Add newline to complete the response
+                print("🎤 message > ", end="", flush=True)  # Show prompt for next message
 
             # If you interrupt the model, it sends a turn_complete.
             # For interruptions to work, we need to stop playback.
