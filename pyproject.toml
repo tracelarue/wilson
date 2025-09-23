@@ -1,0 +1,256 @@
+[project]
+name = "wilson"
+version = "1.0.0"
+description = "Wilson robotics project with ROS2, Gemini AI integration, and multi-modal capabilities"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Trace LaRue", email = "traceglarue@gmail.com"},
+]
+maintainers = [
+    {name = "Trace LaRue", email = "traceglarue@gmail.com"},
+]
+keywords = ["robotics", "ros2", "ai", "gemini", "navigation", "computer-vision"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Computer Science",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    # Core Python libraries
+    "setuptools>=65.0.0",
+    
+    # Computer Vision and Image Processing
+    "opencv-python>=4.8.0",
+    "pillow>=10.0.0",
+    "numpy>=1.24.0",
+    
+    # AI and Machine Learning
+    "google-genai>=1.8.0",
+    "google-generativeai>=0.3.0",
+    
+    # Screen Capture and System
+    "mss>=9.0.0",
+    
+    # MCP (Model Context Protocol)
+    "mcp[cli]>=1.6.0",
+    
+    # Utility Libraries
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0",
+    
+    # Async and Threading (for Python < 3.11)
+    "taskgroup>=0.2.0; python_version < '3.11'",
+    "exceptiongroup>=1.1.0; python_version < '3.11'",
+    
+    # Serial Communication
+    "pyserial>=3.5",
+    
+    # Mathematical Libraries
+    "transforms3d>=0.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-mock>=3.10.0",
+    
+    # Code Quality
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+audio = [
+    # Audio Processing (requires system dependencies)
+    "pyaudio>=0.2.11",
+]
+
+gemini = [
+    # Additional Gemini-specific dependencies
+    "google-genai[all]>=1.8.0",
+    "google-cloud-aiplatform>=1.30.0",
+]
+
+hardware = [
+    # Hardware-specific dependencies (platform-dependent)
+    "ArducamDepthCamera>=0.1.0; sys_platform != 'win32'",
+]
+
+# Full installation with all features
+full = [
+    "wilson[dev,audio,gemini,hardware]",
+]
+
+[project.urls]
+Homepage = "https://github.com/tracelarue/wilson"
+Repository = "https://github.com/tracelarue/wilson"
+Issues = "https://github.com/tracelarue/wilson/issues"
+Documentation = "https://github.com/tracelarue/wilson#readme"
+
+[project.scripts]
+# Gemini Live
+gemini-live = "gemini_live.gemini_live:main"
+gemini-live-mcp = "gemini_live_mcp.main:main"
+
+# Gemini ROS2 nodes
+gemini-node = "gemini.MultiModal_image_as_tool:main"
+multimodal-robot = "gemini.MultiModal_robot:main"
+
+# Depth camera utilities
+tof-pointcloud = "depth_cam.tof_pointcloud:main"
+depth-field = "depth_cam.depth_field:main"
+sim-depth = "depth_cam.sim_depth:main"
+
+# Arduino controller
+slider-control = "arduinobot_controller.slider_control:main"
+
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv]
+# UV-specific configuration
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+# Note: UV workspace configuration removed since some packages use setup.py
+# The existing gemini-live and gemini-live-mcp directories have their own pyproject.toml files
+
+[tool.black]
+line-length = 88
+target-version = ['py310', 'py311', 'py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+  | install
+  | log
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["wilson", "gemini", "depth_cam", "arduinobot_controller"]
+known_third_party = ["rclpy", "cv2", "numpy", "PIL", "google"]
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503", "E501"]
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    "install",
+    "log",
+    ".venv",
+    ".eggs",
+]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+exclude = [
+    "build/",
+    "install/",
+    "log/",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "cv2.*",
+    "mss.*",
+    "pyaudio.*",
+    "ArducamDepthCamera.*",
+    "google.genai.*",
+    "rclpy.*",
+    "sensor_msgs.*",
+    "geometry_msgs.*",
+    "nav2_msgs.*",
+    "tf2_ros.*",
+    "cv_bridge.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --tb=short"
+testpaths = [
+    "tests",
+    "src/*/test",
+]
+python_files = [
+    "test_*.py",
+    "*_test.py",
+]
+python_classes = [
+    "Test*",
+]
+python_functions = [
+    "test_*",
+]
+
+[tool.coverage.run]
+source = [
+    "gemini-live",
+    "gemini-live-mcp", 
+    "src/depth_cam",
+    "src/gemini",
+    "src/arduinobot_controller",
+]
+omit = [
+    "*/test/*",
+    "*/tests/*",
+    "setup.py",
+    "*/build/*",
+    "*/install/*",
+    "*/log/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
