@@ -23,7 +23,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'gemini_node = gemini.MultiModal_image_as_tool:main',
+            'gemini_node = gemini.gemini_with_tools:main',
             'multimodal_robot = gemini.MultiModal_robot:main'
         ],
     },
