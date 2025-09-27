@@ -39,6 +39,15 @@
       <shadows>0</shadows>
     </scene>
 
+    <!-- Set the initial camera view -->
+    <gui fullscreen='0'>
+      <camera name='user_camera'>
+        <pose>3 3 2.5 0 0.5 -2.35</pose>
+        <view_controller>orbit</view_controller>
+        <projection_type>perspective</projection_type>
+      </camera>
+    </gui>
+
     <light name='sun' type='directional'>
       <cast_shadows>0</cast_shadows>
       <pose>0 0 10 0 -0 0</pose>

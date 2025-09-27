@@ -104,8 +104,8 @@ def generate_launch_description():
 
     gemini = Node(
         package='gemini',
-        executable='multimodal',
-        name='gemini_multimodal',
+        executable='gemini_node',
+        name='gemini',
         output='screen',
         arguments=['--mode', 'robot', '--video', 'camera'],  # Changed: removed extra --ros-args
         parameters=[{'use_sim_time': False}],

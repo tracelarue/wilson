@@ -20,6 +20,7 @@ import PIL.Image
 import mss
 import argparse
 import logging
+from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from google.genai.types import RealtimeInputConfig, ActivityHandling
@@ -68,8 +69,13 @@ def resample_audio(audio_data, original_rate, target_rate):
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
+# Load environment variables from .env file in wilson directory
+wilson_dir = os.path.join(os.path.expanduser('~'), 'wilson')
+env_path = os.path.join(wilson_dir, '.env')
+load_dotenv(dotenv_path=env_path)
+
 # API configuration
-GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 MODEL = "models/gemini-2.5-flash-live-preview"
 DEFAULT_MODE = "none"
 

@@ -143,8 +143,14 @@ def generate_launch_description():
     )
     
     # Optional external processes
-    gemini_process = ExecuteProcess(
+    gemini = ExecuteProcess(
         cmd=['tilix', '-e', 'ros2', 'run', 'gemini', 'gemini_node', '--mode', 'sim', '--video', 'camera'],
+        output='screen',
+    )
+
+    # Teleop keyboard in separate terminal
+    teleop = ExecuteProcess(
+        cmd=['tilix', '-e', 'ros2', 'run', 'teleop_twist_keyboard', 'teleop_twist_keyboard', '--ros-args', '--remap', 'cmd_vel:=/diff_drive_controller/cmd_vel_unstamped'],
         output='screen',
     )
     
@@ -154,20 +160,11 @@ def generate_launch_description():
         )
     )
     
-    claude_process = ExecuteProcess(
-        cmd=['claude-desktop'],
-        output='screen',
-    )
     
     # Timed optional processes
     rosbridge_timer = TimerAction(
         period=1.0,
         actions=[rosbridge_server]
-    )
-    
-    claude_timer = TimerAction(
-        period=1.0,
-        actions=[claude_process]
     )
     
     # Initial pose publisher - sets 2D pose estimate for AMCL
@@ -186,7 +183,7 @@ def generate_launch_description():
     
     # Timer for initial pose publisher - start after localization is ready
     initial_pose_timer = TimerAction(
-        period=12.0,  # Wait for localization to be ready
+        period=20.0,  # Wait for gazebo to be ready
         actions=[initial_pose_publisher]
     )
     
@@ -209,8 +206,8 @@ def generate_launch_description():
         move_group_timer,
         initial_pose_timer,
         
-        # Optional components (commented out)
-        # gemini_process,
+        # Optional components
+        gemini,
+        teleop,
         # rosbridge_timer,
-        # claude_timer
     ])

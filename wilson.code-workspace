@@ -8,5 +8,9 @@
 			"name": "ros-mcp-server",
 			"path": "../ros-mcp-server"
 		}
+		{,
+			"name": "discard_pkgs",
+			"path": "../discard_pkgs"
+		}
 	]
 }

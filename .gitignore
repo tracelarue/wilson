@@ -3,6 +3,7 @@ log/
 build/
 install/
 wilson.code-workspace
+.env
 
 
 # Byte-compiled / optimized / DLL files

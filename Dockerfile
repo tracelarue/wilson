@@ -56,9 +56,9 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install \
+  "numpy>=1.21.0,<2.0.0" \
   pyserial \
   inputs \
-  numpy \
   ArducamDepthCamera \
   opencv-python \
   pyaudio \
@@ -67,10 +67,9 @@ RUN pip3 install \
   google-genai \
   pyaudio \
   pillow \
-  mss \
-  "numpy<2.0.0"
+  mss
 
-
+RUN apt-get update && apt-get install -y tilix && rm -rf /var/lib/apt/lists/*
 
 RUN usermod -a -G dialout ${USERNAME}
 RUN usermod -a -G video ${USERNAME}
