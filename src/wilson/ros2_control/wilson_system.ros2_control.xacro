@@ -99,7 +99,7 @@ https://github.com/ros-controls/ros2_control_demos/blob/foxy/ros2_control_demo_d
           <param name="max">${3*pi/4}</param>
         </command_interface>
         <state_interface name="position">
-          <param name="initial_value">0.0</param>
+          <param name="initial_value">0.3049</param>
         </state_interface>
       </joint>
       <joint name="joint_3">
@@ -108,7 +108,7 @@ https://github.com/ros-controls/ros2_control_demos/blob/foxy/ros2_control_demo_d
           <param name="max">${3*pi/4}</param>
         </command_interface>
         <state_interface name="position">
-          <param name="initial_value">0.0</param>
+          <param name="initial_value">-2.3562</param>
         </state_interface>
       </joint>
       <joint name="joint_4">
@@ -117,7 +117,7 @@ https://github.com/ros-controls/ros2_control_demos/blob/foxy/ros2_control_demo_d
           <param name="max">${3*pi/4}</param>
         </command_interface>
         <state_interface name="position">
-          <param name="initial_value">0.0</param>
+          <param name="initial_value">0.5821</param>
         </state_interface>
       </joint>
       <joint name="gripper_left_finger_joint">

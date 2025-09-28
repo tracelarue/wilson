@@ -138,7 +138,7 @@ def generate_launch_description():
     )
     
     move_group_timer = TimerAction(
-        period=3.0,
+        period=8.0,
         actions=[move_group_launch]
     )
     
@@ -154,12 +154,12 @@ def generate_launch_description():
         output='screen',
     )
     
+    # for use with ros-mcp-server
     rosbridge_server = IncludeLaunchDescription(
         AnyLaunchDescriptionSource(
             os.path.join(get_package_share_directory('rosbridge_server'), 'launch', 'rosbridge_websocket_launch.xml')
         )
     )
-    
     
     # Timed optional processes
     rosbridge_timer = TimerAction(

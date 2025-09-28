@@ -53,6 +53,8 @@ RUN apt-get update \
   ros-humble-moveit-* \
   libopen3d-dev \
   ros-humble-rosbridge-server \
+  dbus-x11 \
+  at-spi2-core \
   && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install \
@@ -67,12 +69,17 @@ RUN pip3 install \
   google-genai \
   pyaudio \
   pillow \
-  mss
+  mss \
+  python-dotenv
 
-RUN apt-get update && apt-get install -y tilix && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+  gnome-terminal \
+  tilix \
+  && rm -rf /var/lib/apt/lists/*
 
 RUN usermod -a -G dialout ${USERNAME}
 RUN usermod -a -G video ${USERNAME}
+RUN usermod -a -G audio ${USERNAME}
 
 RUN echo "export ROS_DOMAIN_ID=7" >> ~/.bashrc \
  && echo "export QT_AUTO_SCREEN_SCALE_FACTOR=0" >> ~/.bashrc \
