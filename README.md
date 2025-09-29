@@ -1,10 +1,44 @@
-# wilson
+# Wilson 🤖
+*An Autonomous Assistant Robot with Conversational AI*
+
+Updated (9/28/25)
 
 ![Wilson Robot](wilson.jpeg)
 
-An AI enabled robot. Wilson can interact with the user and world through audio/visual input and audio output. Wilson's main directive is to retrieve the user's desired beverage from a mini fridge!
+## About Wilson
 
-Wilson was custom designed in SolidWorks and 3D printed at home. 
+Wilson is an autonomous robot featuring a differential drive base and a 4-DOF manipulator arm, designed to be your personal beverage assistant! With Google's Gemini Live API integration, Wilson can conversationally interact with users and execute tasks based on natural language requests. His main directive? **Getting you a drink from the mini fridge!** *(coming soon)*
+
+### Why I Built Wilson
+
+I wanted to create a robot that could bridge the gap between advanced AI capabilities and real-world physical interaction. The goal was to build something that wasn't just impressive technically, but actually useful in daily life - starting with the simple but satisfying task of fetching drinks on command.
+
+### How Wilson Works
+
+Wilson operates on **ROS2 Humble** and combines several cutting-edge technologies:
+
+**🧠 AI & Interaction:**
+- Google Gemini Live API for natural conversation and task understanding
+- Real-time audio/visual processing for environmental awareness
+- Tool execution based on conversational commands
+
+**🔧 Hardware:**
+- **Computing**: Raspberry Pi 5 (8GB) as the main brain
+- **Control**: 2 Arduino Nanos for drive and arm control
+- **Sensors**: 
+  - 360° LD-19 LiDAR for navigation and mapping
+  - AruCam ToF camera for depth perception  
+  - USB camera for visual recognition
+  - Novel soft 3D force sensor in the gripper (developed by Dr. Jonathan Miller, et al. at University of Kansas)
+
+**🎨 Design & Manufacturing:**
+I designed every component of Wilson (except the tracks/wheels) in SolidWorks and 3D printed the entire chassis and manipulator at home. You can see the design evolution in the pictures below:
+
+- 📐 [SolidWorks CAD Design](pictures/wilson_solidworks.JPG) - The original 3D model
+- 🎨 [Clean CAD Render](pictures/wilson_solidworks_white_backgorund.JPG) - Professional render view
+- 🤖 [Physical Robot](pictures/wilson.jpg) - Wilson in the real world
+- 🎥 [Gemini Demo Video](pictures/Gemini_demo_video.mp4) - See Wilson's AI in action
+- 📊 [RViz Navigation](pictures/Rviz_screenshot.JPG) - Wilson's perception and planning interface 
 
 ## Try the simulation yourself! 🐳
 
@@ -12,7 +46,7 @@ Wilson was custom designed in SolidWorks and 3D printed at home.
 <summary><strong>🐧 Linux Setup Instructions</strong></summary>
 
 Follow these steps to set up Docker and run Wilson's simulation:
-
+(Tested on Ubuntu 22.04, latest Docker)
 ### Prerequisites Setup
 
 **⚠️ Important:** You will need root or sudo access to complete these steps.
@@ -162,152 +196,9 @@ sudo docker logs -f wilson
 <details>
 <summary><strong>🪟 Windows Setup Instructions</strong></summary>
 
-Follow these steps to set up Docker Desktop and run Wilson's simulation on Windows:
+Windows support is coming soon! 🚧
 
-### Prerequisites Setup
-
-**⚠️ Important:** You will need administrator access to complete these steps.
-
-1. **Update system and install prerequisites:**
-   - Ensure Windows 10 version 2004 or higher, or Windows 11
-   - Enable WSL 2 (Windows Subsystem for Linux)
-   - Install Git for Windows from [git-scm.com](https://git-scm.com/download/win)
-
-2. **Install or Update WSL:**
-   Open PowerShell as Administrator and run:
-   ```powershell
-   wsl --install
-   wsl --update
-   ```
-   Restart your computer if prompted.
-
-3. **Verify WSL installation:**
-   ```powershell
-   wsl --version
-   ```
-
-4. **Clone Wilson repository:**
-   Open Command Prompt or PowerShell and run:
-   ```cmd
-   git clone https://github.com/tracelarue/wilson.git
-   cd wilson
-   ```
-
-5. **Create API key file** (for AI voice/text commands):
-   Create a `.env` file in the wilson directory with your Google API key:
-   ```cmd
-   echo GOOGLE_API_KEY=your_api_key_here > .env
-   ```
-   Replace `your_api_key_here` with your actual Google Gemini API key from [Google AI Studio](https://aistudio.google.com). Without this file, Wilson will work but won't have AI-powered voice commands and object recognition capabilities.
-
-6. **Install Docker Desktop:**
-   - Download Docker Desktop from [docker.com](https://www.docker.com/products/docker-desktop/)
-
-7. **Configure Docker Desktop:**
-   - Start Docker Desktop from the Start Menu
-   - Ensure WSL 2 backend is enabled in Docker Desktop settings
-   - Make sure "Use Docker Compose V2" is enabled
-
-### Running Wilson Simulation
-
-1. **Open PowerShell or Command Prompt as Administrator** and navigate to the wilson directory:
-   ```cmd
-   cd path\to\wilson
-   ```
-
-2. **Pull the ROS 2 base image:**
-   ```cmd
-   docker image pull osrf/ros:humble-desktop-full
-   ```
-
-3. **Build Wilson's Docker image:**
-   ```cmd
-   docker build -t wilson_image .
-   ```
-
-4. **Run the Wilson container:**
-   ```cmd
-   docker run -it --user ros --network=host --ipc=host -v %cd%:/wilson --env=DISPLAY=host.docker.internal:0 -p 9000:9000 --privileged --name wilson wilson_image
-   ```
-
-### X11 Forwarding for GUI (Optional)
-
-For GUI applications on Windows, you may need an X11 server:
-
-1. **Install VcXsrv or Xming:**
-   - Download VcXsrv from [sourceforge.net](https://sourceforge.net/projects/vcxsrv/)
-   - Install and configure with "Disable access control" checked
-
-2. **Start X11 server** before running Docker containers
-
-### Starting the Simulation
-
-Once inside the container, start Wilson's simulation with:
-
-```bash
-colcon build --symlink-install && source install/setup.bash && ros2 launch wilson wilson_sim.launch.py
-```
-
-### Controlling Wilson 🎮
-
-After the simulation launches, you have multiple ways to control Wilson:
-
-- **RViz Panels**: Use the Nav2 and MoveIt panels in RViz for navigation and manipulation
-- **Teleop Keyboard**: Control Wilson directly with keyboard inputs
-- **AI Voice/Text Commands**: Talk or type to Gemini for natural language control
-
-#### AI Commands Examples:
-- "Go to the kitchen"
-- "Go to the living room" 
-- "Go to the mini fridge"
-- "What do you see?"
-- "Find the 3D position of [object]" - This will display a marker in RViz showing the detected object's location
-
-Wilson combines autonomous navigation, manipulation, and AI-powered interaction to create an intelligent robotic assistant!
-
-### Container Management
-
-**Execute commands in a running container:**
-If Wilson is already running in a container, you can access it with:
-```cmd
-docker exec -it wilson /bin/bash
-```
-
-<details>
-<summary><strong>🐳 Common Docker Commands (Windows)</strong></summary>
-
-Here are some useful Docker commands for managing Wilson on Windows:
-
-```cmd
-# List all containers (running and stopped)
-docker ps -a
-
-# Stop the Wilson container
-docker stop wilson
-
-# Start an existing Wilson container
-docker start wilson
-
-# Remove the Wilson container
-docker rm wilson
-
-# Remove the Wilson image
-docker rmi wilson_image
-
-# View container logs
-docker logs wilson
-
-# View real-time logs
-docker logs -f wilson
-
-# Check Docker Desktop status
-docker system info
-
-# Check available disk space
-docker system df
-```
-
-</details>
+I'm working on comprehensive Windows setup instructions with Docker Desktop and WSL 2 integration. Check back soon for the complete Windows installation guide.
 
 </details>
 
