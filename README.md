@@ -3,7 +3,7 @@
 
 Updated (9/28/25)
 
-![Wilson Robot](pictures/wilson.jpeg)
+![Wilson Robot](pictures/wilson.JPG)
 
 ## About Wilson
 
@@ -59,7 +59,6 @@ RViz is used for visualizing sensor data, robot state, and planning. In Wilson's
 
 You can use RViz panels to send navigation goals, control the arm, and monitor AI perception outputs. This combination of Gazebo and RViz enables rapid testing and debugging of Wilson's autonomous and conversational capabilities before deploying to hardware.
 
-![Gemini Demo Video Thumbnail](pictures/Gemini_demo_video.mp4)
 *[Gemini Demo Video](pictures/Gemini_demo_video.mp4) - See Wilson's AI in action*
 
 ## Try the simulation yourself! 🐳
