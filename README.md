@@ -3,7 +3,7 @@
 
 Updated (9/28/25)
 
-![Wilson Robot](wilson.jpeg)
+![Wilson Robot](pictures/wilson.jpeg)
 
 ## About Wilson
 
@@ -32,13 +32,35 @@ Wilson operates on **ROS2 Humble** and combines several cutting-edge technologie
   - Novel soft 3D force sensor in the gripper (developed by Dr. Jonathan Miller, et al. at University of Kansas)
 
 **🎨 Design & Manufacturing:**
-I designed every component of Wilson (except the tracks/wheels) in SolidWorks and 3D printed the entire chassis and manipulator at home. You can see the design evolution in the pictures below:
+I designed every component of Wilson (except the tracks/wheels) in SolidWorks and 3D printed the entire chassis and manipulator at home. You can see the design evolution below:
 
-- 📐 [SolidWorks CAD Design](pictures/wilson_solidworks.JPG) - The original 3D model
-- 🎨 [Clean CAD Render](pictures/wilson_solidworks_white_backgorund.JPG) - Professional render view
-- 🤖 [Physical Robot](pictures/wilson.jpg) - Wilson in the real world
-- 🎥 [Gemini Demo Video](pictures/Gemini_demo_video.mp4) - See Wilson's AI in action
-- 📊 [RViz Navigation](pictures/Rviz_screenshot.JPG) - Wilson's perception and planning interface 
+![SolidWorks CAD Design](pictures/wilson_solidworks.JPG)
+*SolidWorks CAD Design - The original 3D model*
+
+## Simulation & Testing �
+Wilson's simulation leverages both **Gazebo** and **RViz** for a complete robotics development workflow:
+
+### Gazebo Simulation
+
+Gazebo provides a realistic 3D environment where Wilson's physical model, sensors, and actuators are simulated. You can visualize Wilson navigating, manipulating objects, and interacting with its environment just like in the real world. The simulation includes:
+
+- Physics-based movement and collisions
+- Sensor emulation (LiDAR, cameras, force sensors)
+- Interactive objects (e.g., mini fridge, beverage cans)
+
+### RViz Visualization
+
+RViz is used for visualizing sensor data, robot state, and planning. In Wilson's simulation, RViz displays:
+
+- Real-time LiDAR scans and camera feeds
+- Navigation maps and planned paths
+- Manipulator arm trajectories
+- Detected objects and AI-generated markers
+
+You can use RViz panels to send navigation goals, control the arm, and monitor AI perception outputs. This combination of Gazebo and RViz enables rapid testing and debugging of Wilson's autonomous and conversational capabilities before deploying to hardware.
+
+![Gemini Demo Video Thumbnail](pictures/Gemini_demo_video.mp4)
+*[Gemini Demo Video](pictures/Gemini_demo_video.mp4) - See Wilson's AI in action*
 
 ## Try the simulation yourself! 🐳
 
