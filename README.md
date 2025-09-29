@@ -3,7 +3,7 @@
 
 Updated (9/28/25)
 
-![Wilson Robot](pictures/wilson.JPG)
+![Wilson Robot](pictures/wilson.jpg)
 
 ## About Wilson
 
