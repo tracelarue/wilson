@@ -36,14 +36,21 @@ Wilson operates on **ROS2 Humble** and combines a wide range of hardware and sen
   - 5, 20 kg digital servos
 - **Power**:
   - 3S, 5200 mAh LiPo battery
+- **Other**:
+  - USB Speaker for responding to the user
 
-**🎨 Design & Manufacturing:**
-I designed every component of Wilson (except the tracks/wheels) in SolidWorks and 3D printed the entire chassis and manipulator at home. You can see the design evolution below:
+## 🦾🔨 Design & Manufacturing
 
 ![SolidWorks CAD Design](pictures/wilson_solidworks.JPG)
 *SolidWorks CAD Design - The original 3D model*
 
-## Simulation & Testing �
+I designed every component of Wilson (except the tracks/wheels) in SolidWorks and 3D printed the entire chassis and manipulator at home.
+
+Wilson was designed with modularity and servicability in mind. The head, body, base, and track mounts are all seperate components to allow for easier fixes and design changes down the road. 
+
+All of Wilson's electronic components are mounted internally on a modular rail system. This allows for easy removal of components for fixing or upgrading.
+
+## Simulation & Testing 👨‍💻
 Wilson's simulation leverages both **Gazebo** and **RViz** for an accelerated robotics development workflow:
 
 ![Gazebo wimulation with Rviz live data visualization](pictures/gazebo_and_rviz.JPG)
@@ -74,7 +81,7 @@ You can use RViz panels to send navigation goals, control the arm, and monitor A
 ## Try the simulation yourself! 🐳
 
 <details>
-<summary><strong>🐧 Linux Simulation Instructions</strong></summary>
+<summary><strong>🐧 Linux Instructions</strong></summary>
 
 Follow these steps to set up Docker and run Wilson's simulation:
 (Tested on Ubuntu 22.04, latest Docker)
@@ -227,7 +234,7 @@ sudo docker logs -f wilson
 </details>
 
 <details>
-<summary><strong>⊞ Windows Simulation Instructions</strong></summary>
+<summary><strong>⊞ Windows Instructions</strong></summary>
 
 Windows support is coming soon! 🚧
 
