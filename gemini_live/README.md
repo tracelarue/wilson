@@ -73,11 +73,5 @@ rosrun turtlesim turtlesim_node
 ros2 run turtlesim turtlesim_node
 ```
 
-# 5. Acknowledgements
-Portions of this code are adapted from
-[gemini-live-mcp](https://github.com/allenbijo/gemini-live-mcp) (MIT License).
-Further modifications and development by Trace LaRue.
-
-
 
 
