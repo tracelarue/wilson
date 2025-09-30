@@ -242,3 +242,9 @@ I'm working on comprehensive Windows setup instructions with Docker Desktop. Che
 
 </details>
 
+## Contact
+
+Please feel free to submit issues or ideas for further improvement! 
+
+Maintained by Trace LaRue:
+traceglarue@gmail.com

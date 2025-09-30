@@ -55,6 +55,8 @@ RUN apt-get update \
   ros-humble-rosbridge-server \
   dbus-x11 \
   at-spi2-core \
+  gnome-terminal \
+  tilix \
   && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install \
@@ -71,11 +73,6 @@ RUN pip3 install \
   pillow \
   mss \
   python-dotenv
-
-RUN apt-get update && apt-get install -y \
-  gnome-terminal \
-  tilix \
-  && rm -rf /var/lib/apt/lists/*
 
 RUN usermod -a -G dialout ${USERNAME}
 RUN usermod -a -G video ${USERNAME}
