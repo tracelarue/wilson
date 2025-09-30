@@ -1,21 +1,21 @@
 # Wilson 🤖
-*An Autonomous Assistant Robot with Conversational AI*
+A robot for autonomous beverage retrieval, powered by Gemini
 
-Updated (9/28/25)
+Updated (9/30/25)
 
 ![Wilson Robot](pictures/wilson.jpg)
 
 ## About Wilson
 
-Wilson is an autonomous robot featuring a differential drive base and a 4-DOF manipulator arm, designed to be your personal beverage assistant! With Google's Gemini Live API integration, Wilson can conversationally interact with users and execute tasks based on natural language requests. His main directive? **Getting you a drink from the mini fridge!** *(coming soon)*
+Wilson is an autonomous robot featuring a differential drive base and a 4-DOF manipulator arm, designed to be your personal beverage assistant! With Google's Gemini Live API, Wilson can conversationally interact with users and execute tasks based on natural language requests. His main directive? **Getting you a drink from the mini fridge!** *(in development)*
 
 ### Why I Built Wilson
 
-I wanted to create a robot that could bridge the gap between advanced AI capabilities and real-world physical interaction. The goal was to build something that wasn't just impressive technically, but actually useful in daily life - starting with the simple but satisfying task of fetching drinks on command.
+I wanted to create a robot that could bridge the gap between advanced AI capabilities and real-world physical interaction. The goal was to build something impressive technically, build a robust set of robotics skills, and impress any guest who comes to my house - starting with the simple (but apparently not so simple), satisfying task of fetching drinks on command.
 
 ### How Wilson Works
 
-Wilson operates on **ROS2 Humble** and combines several cutting-edge technologies:
+Wilson operates on **ROS2 Humble** and combines a wide range of hardware and sensors:
 
 **🧠 AI & Interaction:**
 - Google Gemini Live API for natural conversation and task understanding
@@ -26,10 +26,16 @@ Wilson operates on **ROS2 Humble** and combines several cutting-edge technologie
 - **Computing**: Raspberry Pi 5 (8GB) as the main brain
 - **Control**: 2 Arduino Nanos for drive and arm control
 - **Sensors**: 
-  - 360° LD-19 LiDAR for navigation and mapping
+  - LD-19 LiDAR for navigation and mapping
   - AruCam ToF camera for depth perception  
   - USB camera for visual recognition
-  - Novel soft 3D force sensor in the gripper (developed by Dr. Jonathan Miller, et al. at University of Kansas)
+  - Microphone for listening to the user
+  - Novel soft 3D force sensor in the gripper (developed by Dr. Jonathan Miller, et al. at the University of Kansas)
+- **Motors**:
+  - 2, GA37-520 DC motors with integrated encoders
+  - 5, 20 kg digital servos
+- **Power**:
+  - 3S, 5200 mAh LiPo battery
 
 **🎨 Design & Manufacturing:**
 I designed every component of Wilson (except the tracks/wheels) in SolidWorks and 3D printed the entire chassis and manipulator at home. You can see the design evolution below:
@@ -38,33 +44,37 @@ I designed every component of Wilson (except the tracks/wheels) in SolidWorks an
 *SolidWorks CAD Design - The original 3D model*
 
 ## Simulation & Testing �
-Wilson's simulation leverages both **Gazebo** and **RViz** for a complete robotics development workflow:
+Wilson's simulation leverages both **Gazebo** and **RViz** for an accelerated robotics development workflow:
+
+![Gazebo wimulation with Rviz live data visualization](pictures/gazebo_and_rviz.JPG)
 
 ### Gazebo Simulation
 
-Gazebo provides a realistic 3D environment where Wilson's physical model, sensors, and actuators are simulated. You can visualize Wilson navigating, manipulating objects, and interacting with its environment just like in the real world. The simulation includes:
+Gazebo provides a realistic 3D environment where Wilson's physical model, sensors, and actuators are simulated. You can simulate Wilson navigating, manipulating objects, and interacting with its environment just like in the real world. The simulation includes:
 
 - Physics-based movement and collisions
 - Sensor emulation (LiDAR, cameras, force sensors)
-- Interactive objects (e.g., mini fridge, beverage cans)
+- Interactive objects (Coke can)
+
 
 ### RViz Visualization
 
 RViz is used for visualizing sensor data, robot state, and planning. In Wilson's simulation, RViz displays:
 
-- Real-time LiDAR scans and camera feeds
+- The robot model
+- Real-time LiDAR scans, depth camera point clouds, and images from a simulated camera
 - Navigation maps and planned paths
 - Manipulator arm trajectories
-- Detected objects and AI-generated markers
+- AI-generated position markers for detected objects
 
 You can use RViz panels to send navigation goals, control the arm, and monitor AI perception outputs. This combination of Gazebo and RViz enables rapid testing and debugging of Wilson's autonomous and conversational capabilities before deploying to hardware.
 
-*[Gemini Demo Video](pictures/Gemini_demo_video.mp4) - See Wilson's AI in action*
+![AI controlled navigation demo](pictures/Gemini_demo_video.mp4) - See Wilson's AI in action*
 
 ## Try the simulation yourself! 🐳
 
 <details>
-<summary><strong>🐧 Linux Setup Instructions</strong></summary>
+<summary><strong>🐧 Linux Simulation Instructions</strong></summary>
 
 Follow these steps to set up Docker and run Wilson's simulation:
 (Tested on Ubuntu 22.04, latest Docker)
@@ -102,6 +112,7 @@ Follow these steps to set up Docker and run Wilson's simulation:
    ```bash
    sudo groupadd docker
    sudo usermod -aG docker $USER
+   reboot
    ```
    **Note:** We'll use `sudo` for simplicity in the following steps.
 
@@ -124,12 +135,12 @@ Follow these steps to set up Docker and run Wilson's simulation:
 ### Running Wilson Simulation
 Run these commands with `sudo` privileges:
 
-1. **Pull the ROS 2 base image:**
+1. **Pull the ROS 2 base image (~3-5 min):**
    ```bash
    sudo docker image pull osrf/ros:humble-desktop-full
    ```
 
-2. **Build Wilson's Docker image** (must be run from the wilson directory):
+2. **Build Wilson's Docker image (~3-5 min)** (must be run from the wilson directory):
    ```bash
    sudo docker build -t wilson_image .
    ```
@@ -148,13 +159,14 @@ Run these commands with `sudo` privileges:
    ```
 
 
-
 ### Starting the Simulation
 
 Once inside the container, start Wilson's simulation with:
 
 ```bash
-colcon build --symlink-install && source install/setup.bash && ros2 launch wilson wilson_sim.launch.py
+colcon build --symlink-install && \
+source install/setup.bash && \
+ros2 launch wilson wilson_sim.launch.py
 ```
 
 ### Controlling Wilson 🎮
@@ -215,11 +227,11 @@ sudo docker logs -f wilson
 </details>
 
 <details>
-<summary><strong>🪟 Windows Setup Instructions</strong></summary>
+<summary><strong>⊞ Windows Simulation Instructions</strong></summary>
 
 Windows support is coming soon! 🚧
 
-I'm working on comprehensive Windows setup instructions with Docker Desktop and WSL 2 integration. Check back soon for the complete Windows installation guide.
+I'm working on comprehensive Windows setup instructions with Docker Desktop. Check back soon for the complete Windows simulation guide.
 
 </details>
 
