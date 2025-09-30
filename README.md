@@ -76,7 +76,7 @@ RViz is used for visualizing sensor data, robot state, and planning. In Wilson's
 
 You can use RViz panels to send navigation goals, control the arm, and monitor AI perception outputs. This combination of Gazebo and RViz enables rapid testing and debugging of Wilson's autonomous and conversational capabilities before deploying to hardware.
 
-![AI controlled navigation demo](pictures/Gemini_demo_video.mp4) - See Wilson's AI in action*
+![AI controlled navigation demo](pictures/demo_video_low_res.mp4) - See Wilson's AI in action*
 
 ## Try the simulation yourself! 🐳
 
