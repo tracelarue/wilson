@@ -6,7 +6,7 @@ This example shows how to use the ros-mcp-server with the Gemini Live API.
 Tested in ubuntu 22.04, python 3.10.12, ROS2 Humble.
 
 # 1. **Installation**
-Follow the instructions in [installation guide](docs/installation.md) to install the ros-mcp-server which includes this example. 
+Follow the instructions in [ros-mcp-server repository](https://github.com/robotmcp/ros-mcp-server) to install the ros-mcp-server which includes this example. 
 
 # 2. **Create and store Google API Key**:
 Go to [aistudio.google.com](https://aistudio.google.com) and create an API key.
