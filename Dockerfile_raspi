@@ -1,4 +1,4 @@
-FROM osrf/ros:humble-ros-base
+FROM ros:humble-ros-base
 
 
 # Create a non-root user

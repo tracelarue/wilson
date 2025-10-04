@@ -1,6 +1,9 @@
 #include "arduinobot_controller/arduinobot_interface.hpp"
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 #include <pluginlib/class_list_macros.hpp>
+#include <thread>
+#include <chrono>
+#include <sstream>
 
 
 namespace arduinobot_controller
@@ -59,9 +62,25 @@ CallbackReturn ArduinobotInterface::on_init(const hardware_interface::HardwareIn
     return CallbackReturn::FAILURE;
   }
 
-  position_commands_.reserve(info_.joints.size());
-  position_states_.reserve(info_.joints.size());
-  prev_position_commands_.reserve(info_.joints.size());
+  // Manual initial positions - using "idle" state from SRDF
+  // Order: joint_1, joint_2, joint_3, joint_4, gripper_left_finger_joint
+  std::vector<double> initial_positions = {0.0, 0.2495, -2.3562, -0.6098, 0.0};
+
+  position_commands_.resize(info_.joints.size());
+  position_states_.resize(info_.joints.size());
+  prev_position_commands_.resize(info_.joints.size());
+
+  // Initialize with manual values
+  for (size_t i = 0; i < info_.joints.size() && i < initial_positions.size(); i++)
+  {
+    position_commands_[i] = initial_positions[i];
+    position_states_[i] = initial_positions[i];
+    prev_position_commands_[i] = initial_positions[i];
+    
+    RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), 
+               "Joint %s initial position: %f rad", 
+               info_.joints[i].name.c_str(), initial_positions[i]);
+  }
 
   return CallbackReturn::SUCCESS;
 }
@@ -101,11 +120,6 @@ CallbackReturn ArduinobotInterface::on_activate(const rclcpp_lifecycle::State &p
 {
   RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), "Starting robot hardware ...");
 
-  // Reset commands and states and set initial positions
-  position_commands_ = { 0.0, 0.0, -1.57, 0.0, 0.0 }; 
-  prev_position_commands_ = { 0.0, 0.0, -1.57, 0.0, 0.0 };
-  position_states_ = { 0.0, 0.0, -1.57, 0.0, 0.0 };
-
   try
   {
     arduino_.Open(port_);
@@ -117,6 +131,13 @@ CallbackReturn ArduinobotInterface::on_activate(const rclcpp_lifecycle::State &p
                         "Something went wrong while interacting with port " << port_);
     return CallbackReturn::FAILURE;
   }
+
+  // Use the manual initial positions set in on_init() instead of reading from Arduino
+  RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), 
+              "Using manual initial positions - not reading current servo positions from Arduino");
+
+  // Initialize previous commands to match current commands
+  prev_position_commands_ = position_commands_;
 
   RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"),
               "Hardware started, ready to take commands");
@@ -151,6 +172,16 @@ hardware_interface::return_type ArduinobotInterface::read(const rclcpp::Time &ti
 {
   // Open Loop Control - assuming the robot is always where we command to be
   position_states_ = position_commands_;
+  
+  // Debug: Log the current state being reported
+  static int log_counter = 0;
+  if (++log_counter % 100 == 0) { // Log every 100 reads to avoid spam
+    RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), 
+                "Current state: j1=%.3f, j2=%.3f, j3=%.3f, j4=%.3f, gripper=%.3f",
+                position_states_[0], position_states_[1], position_states_[2], 
+                position_states_[3], position_states_[4]);
+  }
+  
   return hardware_interface::return_type::OK;
 }
 
@@ -163,13 +194,11 @@ hardware_interface::return_type ArduinobotInterface::write(const rclcpp::Time &t
     return hardware_interface::return_type::OK;
   }
 
-  // Skip sending commands on first activation to prevent servo jump
-  static bool first_activation = true;
-  if (first_activation) {
-    first_activation = false;
-    prev_position_commands_ = position_commands_;
-    return hardware_interface::return_type::OK;
-  }
+  // Debug: Log the command positions
+  RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), 
+              "Received command: j1=%.3f, j2=%.3f, j3=%.3f, j4=%.3f, gripper=%.3f",
+              position_commands_[0], position_commands_[1], position_commands_[2], 
+              position_commands_[3], position_commands_[4]);
 
   std::string msg;
   // New formula: degrees = (radians + 3π/4) × (180/π)
