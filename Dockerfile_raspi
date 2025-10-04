@@ -1,5 +1,7 @@
 FROM ros:humble-ros-base
 
+COPY --chown=ros:ros /boot/firmware/config.txt /boot/firmware/config.txt
+
 
 # Create a non-root user
 ARG USERNAME=ros
