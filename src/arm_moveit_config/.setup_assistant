@@ -1,0 +1,25 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: arm
+    relative_path: description/urdf/r4bot.urdf.xacro
+  srdf:
+    relative_path: config/r4bot.srdf
+  package_settings:
+    author_name: Trace LaRue
+    author_email: traceglarue@gmail.com
+    generated_timestamp: 1751778434
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
