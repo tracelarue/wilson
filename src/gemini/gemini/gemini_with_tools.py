@@ -70,7 +70,7 @@ def resample_audio(audio_data, original_rate, target_rate):
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # Load environment variables from .env file in wilson directory
-env_path = '/wilson/.env'
+env_path = 'home/trace/wilson/.env'
 load_dotenv(dotenv_path=env_path)
 
 # API configuration

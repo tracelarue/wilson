@@ -150,7 +150,7 @@ def generate_launch_description():
 
     # Teleop keyboard in separate terminal
     teleop = ExecuteProcess(
-        cmd=['tilix', '-e', 'ros2', 'run', 'teleop_twist_keyboard', 'teleop_twist_keyboard', '--ros-args', '--remap', 'cmd_vel:=/diff_drive_controller/cmd_vel_unstamped'],
+        cmd=['tilix', '-e', 'ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap cmd_vel:=/diff_drive_controller/cmd_vel_unstamped'],
         output='screen',
     )
     
@@ -166,7 +166,17 @@ def generate_launch_description():
         period=1.0,
         actions=[rosbridge_server]
     )
-    
+
+    gemini_ros_mcp = ExecuteProcess(
+        cmd=['tilix', '-e', 'cd /home/trace/wilson/gemini_live && uv run gemini_live.py'],
+        output='screen',
+    )
+
+    gemini_ros_mcp_timer = TimerAction(
+        period=3.0,
+        actions=[gemini_ros_mcp]
+    )
+
     # Initial pose publisher - sets 2D pose estimate for AMCL
     initial_pose_publisher = Node(
         package='wilson',
@@ -207,7 +217,8 @@ def generate_launch_description():
         initial_pose_timer,
         
         # Optional components
-        gemini,
+        #gemini,
         teleop,
-        # rosbridge_timer,
+        rosbridge_timer,
+        #gemini_ros_mcp_timer
     ])
