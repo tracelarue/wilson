@@ -106,7 +106,7 @@ Follow these steps to set up Docker and run Wilson's simulation:
 3. **Create API key file** (for AI voice/text commands):
    Create a `.env` file in the wilson directory with your Google API key:
    ```.env
-   echo "GOOGLE_API_KEY="your_api_key_here" " > .env
+   GOOGLE_API_KEY="your_api_key_here"
    ```
    Replace `your_api_key_here` with your actual Google Gemini API key from [Google AI Studio](https://aistudio.google.com). Without this file, Wilson will work but won't have AI-powered voice commands and object recognition capabilities.
 
