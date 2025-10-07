@@ -1,7 +1,7 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, TimerAction
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, TimerAction, ExecuteProcess
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -102,19 +102,17 @@ def generate_launch_description():
         actions=[localization_launch]
     )
 
-    gemini = Node(
-        package='gemini',
-        executable='gemini_node',
-        name='gemini',
+    # Optional external processes
+    gemini = ExecuteProcess(
+        cmd=['tilix', '-e', 'ros2', 'run', 'gemini', 'gemini_node', '--mode', 'sim', '--video', 'camera'],
         output='screen',
-        arguments=['--mode', 'robot', '--video', 'camera'],  # Changed: removed extra --ros-args
-        parameters=[{'use_sim_time': False}],
-        emulate_tty=True
     )
 
-    gemini_timer = TimerAction(
-        period=5.0,
-        actions=[gemini]
+
+    # Teleop keyboard in separate terminal
+    teleop = ExecuteProcess(
+        cmd=['tilix', '-e', 'ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap cmd_vel:=/diff_drive_controller/cmd_vel_unstamped'],
+        output='screen',
     )
 
 
@@ -126,5 +124,6 @@ def generate_launch_description():
         move_group_timer,
         nav2_timer,
         localization_timer,
-        #gemini_timer
+        #gemini,
+        teleop,
     ])

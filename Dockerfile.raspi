@@ -63,9 +63,9 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install \
-  "numpy>=1.21.0,<2.0.0" \
   pyserial \
   inputs \
+  numpy \
   ArducamDepthCamera \
   opencv-python \
   pyaudio \
@@ -75,7 +75,8 @@ RUN pip3 install \
   pyaudio \
   pillow \
   mss \
-  python-dotenv
+  python-dotenv \
+  "numpy<2.0.0"
 
 RUN usermod -a -G dialout ${USERNAME}
 RUN usermod -a -G video ${USERNAME}
@@ -88,8 +89,9 @@ RUN echo "export ROS_DOMAIN_ID=7" >> ~/.bashrc \
 
  # Copy the entrypoint and bashrc scripts so we have
 # our container's environment set up correctly
-COPY entrypoint.sh /entrypoint.sh
-COPY bashrc /home/${USERNAME}/.bashrc
+COPY rpi_entrypoint.sh /entrypoint.sh
+COPY rpi_bashrc /home/${USERNAME}/.bashrc
+COPY rpi_bashrc /root/.bashrc
 
 # Set up entrypoint and default command
 ENTRYPOINT ["/bin/bash", "/entrypoint.sh"]

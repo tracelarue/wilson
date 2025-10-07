@@ -79,7 +79,7 @@ https://github.com/ros-controls/ros2_control_demos/blob/foxy/ros2_control_demo_d
         <xacro:unless value="${use_fake_hardware}">
           <hardware>
             <plugin>arduinobot_controller/ArduinobotInterface</plugin>
-            <param name="port">/dev/ttyUSB1</param>
+            <param name="port">/dev/ttyUSB2</param>
           </hardware>
         </xacro:unless>
       </xacro:unless>

@@ -13,8 +13,18 @@ String inputBuffer = "";
 // Current servo positions (tracking) - matches ROS2 "idle" state from SRDF
 int currentBase = 135, currentShoulder = 149, currentElbow = 0, currentWrist = 100, currentGripper = 0;
 
+// LED breathing variables
+#define LED_PIN 11
+int ledBrightness = 25;
+int ledDirection = 1;
+unsigned long lastLedUpdate = 0;
+#define LED_UPDATE_INTERVAL 5  // Update every 20ms for smooth breathing
+
 void setup() {
   Serial.begin(115200);
+
+  // Setup LED pin
+  pinMode(LED_PIN, OUTPUT);
 
   baseServo.attach(3, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
   shoulderServo.attach(5, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
@@ -33,6 +43,23 @@ void setup() {
 }
 
 void loop() {
+  // Update LED breathing effect
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastLedUpdate >= LED_UPDATE_INTERVAL) {
+    lastLedUpdate = currentMillis;
+    
+    ledBrightness += ledDirection;
+    if (ledBrightness >= 255) {
+      ledBrightness = 255;
+      ledDirection = -1;
+    } else if (ledBrightness <= 25) {
+      ledBrightness = 25;
+      ledDirection = 1;
+    }
+    
+    analogWrite(LED_PIN, ledBrightness);
+  }
+
   while (Serial.available() > 0) {
     char incomingChar = Serial.read();
 
