@@ -9,8 +9,8 @@ from moveit_configs_utils import MoveItConfigsBuilder
 def generate_launch_description():
     # planning_context
     moveit_config = (
-        MoveItConfigsBuilder("arm") #this will automatically add "_moveit_config"
-        .robot_description(file_path="config/arm.urdf.xacro")
+        MoveItConfigsBuilder("wilson") #this will automatically add "_moveit_config"
+        .robot_description(file_path="config/wilson.urdf.xacro")
         .trajectory_execution(file_path="config/moveit_controllers.yaml")
         .planning_pipelines(
             pipelines=["ompl"]
@@ -72,7 +72,7 @@ def generate_launch_description():
 
     # ros2_control using FakeSystem as hardware
     ros2_controllers_path = os.path.join(
-        get_package_share_directory("arm_moveit_config"),
+        get_package_share_directory("wilson_moveit_config"),
         "config",
         "ros2_controllers.yaml",
     )
@@ -89,8 +89,8 @@ def generate_launch_description():
     # Load controllers
     load_controllers = []
     for controller in [
-        "arm_group_controller",
-        "gripper_group_controller",
+        "arm_controller",
+        "gripper_controller",
         "joint_state_broadcaster",
     ]:
         load_controllers += [

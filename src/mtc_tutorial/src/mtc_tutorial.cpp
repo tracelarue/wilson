@@ -57,36 +57,36 @@ geometry_msgs::msg::Vector3Stamped MTCTaskNode::computeApproachVector() {
 
     try {
         // Wait for transform to be available
-        if (!tf_buffer_->canTransform("world", "base_link", tf2::TimePointZero, tf2::durationFromSec(1.0))) {
-            RCLCPP_WARN(LOGGER, "Cannot get transform from base_link to world, using default X direction");
+        if (!tf_buffer_->canTransform("world", "link_1", tf2::TimePointZero, tf2::durationFromSec(1.0))) {
+            RCLCPP_WARN(LOGGER, "Cannot get transform from link_1 to world, using default X direction");
             approach_vec.vector.x = 1.0;
             approach_vec.vector.y = 0.0;
             approach_vec.vector.z = 0.0;
             return approach_vec;
         }
 
-        // Get base_link position in world frame
+        // Get link_1 position in world frame
         geometry_msgs::msg::TransformStamped transform =
-            tf_buffer_->lookupTransform("world", "base_link", tf2::TimePointZero);
+            tf_buffer_->lookupTransform("world", "link_1", tf2::TimePointZero);
 
         // Object position in world frame (from setupPlanningScene)
-        double object_x = 0.6;
+        double object_x = 0.4;
         double object_y = 0.1;
         double object_z = 0.2;
 
-        // Compute vector from base_link to object
+        // Compute vector from link_1 to object
         double dx = object_x - transform.transform.translation.x;
         double dy = object_y - transform.transform.translation.y;
         double dz = object_z - transform.transform.translation.z;
 
-        // Normalize the vector
+        // Normalize the vector (keeping z = 0)
         double length = std::sqrt(dx*dx + dy*dy + dz*dz);
         if (length > 1e-6) {
             approach_vec.vector.x = dx / length;
             approach_vec.vector.y = dy / length;
-            approach_vec.vector.z = dz / length;
+            approach_vec.vector.z = 0;
         } else {
-            RCLCPP_WARN(LOGGER, "Base link and object are at same position, using default X direction");
+            RCLCPP_WARN(LOGGER, "Link 1 and object are at same position, using default X direction");
             approach_vec.vector.x = 1.0;
             approach_vec.vector.y = 0.0;
             approach_vec.vector.z = 0.0;
@@ -115,7 +115,7 @@ void MTCTaskNode::setupPlanningScene() {
     object.primitives[0].dimensions = { 0.122, 0.033 };
 
     geometry_msgs::msg::Pose pose;
-    pose.position.x = 0.6;
+    pose.position.x = 0.4;
     pose.position.y = 0.1;
     // to put the object above surface we bring the half that is below ground to top.
     pose.position.z = 0.2;
@@ -160,8 +160,8 @@ mtc::Task MTCTaskNode::createTask() {
     task.stages()->setName("chessaton demo task");
     task.loadRobotModel(node_);
 
-    const auto& arm_group_name = "arm_group";
-    const auto& hand_group_name = "hand_group";
+    const auto& arm_group_name = "arm";
+    const auto& hand_group_name = "gripper";
     const auto& hand_frame = "end_effector_frame";
 
     // Set task properties
@@ -203,7 +203,7 @@ mtc::Task MTCTaskNode::createTask() {
         auto stage_open_hand =
             std::make_unique<mtc::stages::MoveTo>("open hand", interpolation_planner);
         stage_open_hand->setGroup(hand_group_name);
-        stage_open_hand->setGoal("hand_open");
+        stage_open_hand->setGoal("open");
         task.add(std::move(stage_open_hand));
     }
 
@@ -242,7 +242,7 @@ mtc::Task MTCTaskNode::createTask() {
             stage->properties().set("marker_ns", "approach_object");
             stage->properties().set("link", hand_frame);
             stage->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
-            stage->setMinMaxDistance(0.01, 0.03);
+            stage->setMinMaxDistance(0.1, 0.2);
 
             // Compute approach direction dynamically from base_link to object
             geometry_msgs::msg::Vector3Stamped vec = computeApproachVector();
@@ -254,11 +254,18 @@ mtc::Task MTCTaskNode::createTask() {
     	 *               Generate Grasp Pose                *
          ****************************************************/
         {
+            // Allow collisions between hand and object for grasp generation
+            auto allow_collision = std::make_unique<mtc::stages::ModifyPlanningScene>("allow collision (hand,object)");
+            allow_collision->allowCollisions("object",
+                task.getRobotModel()->getJointModelGroup(hand_group_name)->getLinkModelNamesWithCollisionGeometry(),
+                true);
+            grasp->insert(std::move(allow_collision));
+
             // Sample grasp pose
             auto stage = std::make_unique<mtc::stages::GenerateGraspPose>("generate grasp pose");
             stage->properties().configureInitFrom(mtc::Stage::PARENT);
             stage->properties().set("marker_ns", "grasp_pose");
-            stage->setPreGraspPose("hand_open");
+            stage->setPreGraspPose("open");
             stage->setObject("object");
             stage->setAngleDelta(M_PI / 12);
             stage->setMonitoredStage(current_state_ptr);  // Hook into current state
@@ -288,23 +295,12 @@ mtc::Task MTCTaskNode::createTask() {
         }
 
         /****************************************************
-    	 *         Allow Collision (hand, object)           *
-         ****************************************************/
-        {
-            auto stage = std::make_unique<mtc::stages::ModifyPlanningScene>("allow collision (hand,object)");
-            stage->allowCollisions("object",
-                task.getRobotModel()->getJointModelGroup(hand_group_name)->getLinkModelNamesWithCollisionGeometry(),
-                true);
-            grasp->insert(std::move(stage));
-        }
-
-        /****************************************************
     	 *                    Close Hand                    *
          ****************************************************/
         {
             auto stage = std::make_unique<mtc::stages::MoveTo>("close hand", interpolation_planner);
             stage->setGroup(hand_group_name);
-            stage->setGoal("hand_close");
+            stage->setGoal("close");
             grasp->insert(std::move(stage));
         }
 

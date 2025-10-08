@@ -621,10 +621,6 @@
       upper="0"
       effort="0"
       velocity="0" />
-    <mimic
-      joint="gripper_left_finger_joint"
-      multiplier="-1"
-      offset="0" />
   </joint>
 
 </robot>

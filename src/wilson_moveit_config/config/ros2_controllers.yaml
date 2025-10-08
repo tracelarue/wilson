@@ -21,6 +21,8 @@ arm_controller:
       - joint_2
       - joint_3
       - joint_4
+      - end_effector_roll_joint
+      - end_effector_yaw_joint
     command_interfaces:
       - position
     state_interfaces:
@@ -40,6 +42,7 @@ gripper_controller:
   ros__parameters:
     joints:
       - gripper_left_finger_joint
+      - gripper_right_finger_joint
     command_interfaces:
       - position
     state_interfaces:
