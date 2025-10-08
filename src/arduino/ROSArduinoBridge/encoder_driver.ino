@@ -38,7 +38,7 @@
         
 	enc_last <<=2; //shift previous state two places
 	enc_last |= (PIND & (3 << 2)) >> 2; //read the current state into lowest 2 bits
-
+  
   	left_enc_pos += ENC_STATES[(enc_last & 0x0f)];
   }
   
@@ -79,4 +79,3 @@ void resetEncoders() {
 }
 
 #endif
-

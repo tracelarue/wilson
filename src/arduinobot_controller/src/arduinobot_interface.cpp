@@ -174,13 +174,13 @@ hardware_interface::return_type ArduinobotInterface::read(const rclcpp::Time &ti
   position_states_ = position_commands_;
   
   // Debug: Log the current state being reported
-  static int log_counter = 0;
-  if (++log_counter % 100 == 0) { // Log every 100 reads to avoid spam
-    RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), 
-                "Current state: j1=%.3f, j2=%.3f, j3=%.3f, j4=%.3f, gripper=%.3f",
-                position_states_[0], position_states_[1], position_states_[2], 
-                position_states_[3], position_states_[4]);
-  }
+  //static int log_counter = 0;
+  //if (++log_counter % 100 == 0) { // Log every 100 reads to avoid spam
+  //  RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), 
+  //              "Current state: j1=%.3f, j2=%.3f, j3=%.3f, j4=%.3f, gripper=%.3f",
+  //              position_states_[0], position_states_[1], position_states_[2], 
+  //              position_states_[3], position_states_[4]);
+  //}
   
   return hardware_interface::return_type::OK;
 }
@@ -195,10 +195,10 @@ hardware_interface::return_type ArduinobotInterface::write(const rclcpp::Time &t
   }
 
   // Debug: Log the command positions
-  RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), 
-              "Received command: j1=%.3f, j2=%.3f, j3=%.3f, j4=%.3f, gripper=%.3f",
-              position_commands_[0], position_commands_[1], position_commands_[2], 
-              position_commands_[3], position_commands_[4]);
+  //RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), 
+  //            "Received command: j1=%.3f, j2=%.3f, j3=%.3f, j4=%.3f, gripper=%.3f",
+  //            position_commands_[0], position_commands_[1], position_commands_[2], 
+  //            position_commands_[3], position_commands_[4]);
 
   std::string msg;
   // New formula: degrees = (radians + 3π/4) × (180/π)
