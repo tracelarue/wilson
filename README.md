@@ -236,6 +236,7 @@ sudo docker logs -f wilson
 
 </details>
 
+<details>
 <summary><strong>⊞ Windows Instructions</strong></summary>
 
 Windows support is coming soon! 🚧
