@@ -58,7 +58,6 @@
 
   <export>
     <build_type>ament_cmake</build_type>
-    <!-- <gazebo_ros gazebo_model_path="/home/trace/wilson/install/wilson/share/"/> -->
-    <gazebo_ros gazebo_model_path="/wilson/install/wilson/share/"/> <!-- Change based on docker or not -->
+    <gazebo_ros gazebo_model_path="/wilson/install/wilson/share/:/home/trace/wilson/install/wilson/share/"/>
   </export>
 </package>
