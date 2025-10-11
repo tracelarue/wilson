@@ -121,9 +121,9 @@ def generate_launch_description():
         declare_map_yaml,
         declare_autostart,
         robot_launch,
-        #move_group_timer,
-        #nav2_timer,
-        #localization_timer,
+        move_group_timer,
+        nav2_timer,
+        localization_timer,
         #gemini,
         teleop,
     ])
