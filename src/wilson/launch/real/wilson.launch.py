@@ -104,7 +104,7 @@ def generate_launch_description():
 
     # Optional external processes
     gemini = ExecuteProcess(
-        cmd=['tilix', '-e', 'ros2', 'run', 'gemini', 'gemini_node', '--mode', 'sim', '--video', 'camera'],
+        cmd=['tilix', '-e', 'ros2', 'run', 'gemini', 'gemini_node', '--mode', 'robot', '--video', 'camera'],
         output='screen',
     )
 
@@ -121,9 +121,9 @@ def generate_launch_description():
         declare_map_yaml,
         declare_autostart,
         robot_launch,
-        move_group_timer,
-        nav2_timer,
-        localization_timer,
+        #move_group_timer,
+        #nav2_timer,
+        #localization_timer,
         #gemini,
         teleop,
     ])
