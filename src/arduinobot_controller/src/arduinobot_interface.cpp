@@ -64,7 +64,7 @@ CallbackReturn ArduinobotInterface::on_init(const hardware_interface::HardwareIn
 
   // Manual initial positions - using "idle" state from SRDF
   // Order: joint_1, joint_2, joint_3, joint_4, gripper_left_finger_joint
-  std::vector<double> initial_positions = {0.0, 0.2495, -2.3562, -0.6098, 0.0};
+  std::vector<double> initial_positions = {0.0, 0.2495, -2.1817, -0.6098, 0.0};
 
   position_commands_.resize(info_.joints.size());
   position_states_.resize(info_.joints.size());

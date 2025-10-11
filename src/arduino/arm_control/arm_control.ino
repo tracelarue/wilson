@@ -11,7 +11,7 @@ Servo baseServo, shoulderServo, elbowServo, wristServo, gripperServo;
 String inputBuffer = "";
 
 // Current servo positions (tracking) - matches ROS2 "idle" state from SRDF
-int currentBase = 135, currentShoulder = 149, currentElbow = 0, currentWrist = 100, currentGripper = 0;
+int currentBase = 135, currentShoulder = 149, currentElbow = 10, currentWrist = 100, currentGripper = 0;
 
 // LED breathing variables
 #define LED_PIN 11
@@ -32,10 +32,10 @@ void setup() {
   wristServo.attach(9, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
   gripperServo.attach(10, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
 
-  // Default positions - matches ROS2 "idle" state {0.0, 0.2495, -2.3562, -0.6098, 0.0}
+  // Default positions - matches ROS2 "idle" state {0.0, 0.2495, -2.1817, -0.6098, 0.0}
   setServoPosition(baseServo, 135);     // joint_1: 0.0 rad
   setServoPosition(shoulderServo, 149); // joint_2: 0.2495 rad (14.3°)
-  setServoPosition(elbowServo, 0);      // joint_3: -2.3562 rad (-135°)
+  setServoPosition(elbowServo, 10);     // joint_3: -2.1817 rad (-125°)
   setServoPosition(wristServo, 100);    // joint_4: -0.6098 rad (-34.9°)
   setServoPosition(gripperServo, 0);    // gripper: 0.0 rad
 

@@ -86,8 +86,8 @@ https://github.com/ros-controls/ros2_control_demos/blob/foxy/ros2_control_demo_d
 
       <joint name="joint_1">
         <command_interface name="position">
-          <param name="min">${-1*pi/2}</param>
-          <param name="max">${1*pi/2}</param>
+          <param name="min">-1.5708</param>
+          <param name="max">1.3090</param>
         </command_interface>
         <state_interface name="position">
           <param name="initial_value">0.0</param>
@@ -95,29 +95,29 @@ https://github.com/ros-controls/ros2_control_demos/blob/foxy/ros2_control_demo_d
       </joint>
       <joint name="joint_2">
         <command_interface name="position">
-          <param name="min">${-3*pi/4}</param>
-          <param name="max">${3*pi/4}</param>
+          <param name="min">-1.7453</param>
+          <param name="max">1.7453</param>
         </command_interface>
         <state_interface name="position">
-          <param name="initial_value">0.3049</param>
+          <param name="initial_value">0.2495</param>
         </state_interface>
       </joint>
       <joint name="joint_3">
         <command_interface name="position">
-          <param name="min">${-3*pi/4}</param>
-          <param name="max">${3*pi/4}</param>
+          <param name="min">-2.1817</param>
+          <param name="max">2.1817</param>
         </command_interface>
         <state_interface name="position">
-          <param name="initial_value">-2.3562</param>
+          <param name="initial_value">-2.1817</param>
         </state_interface>
       </joint>
       <joint name="joint_4">
         <command_interface name="position">
-          <param name="min">${-3*pi/4}</param>
-          <param name="max">${3*pi/4}</param>
+          <param name="min">-2.0944</param>
+          <param name="max">2.0944</param>
         </command_interface>
         <state_interface name="position">
-          <param name="initial_value">0.5821</param>
+          <param name="initial_value">-0.6098</param>
         </state_interface>
       </joint>
       <joint name="gripper_left_finger_joint">
