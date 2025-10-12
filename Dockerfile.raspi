@@ -19,8 +19,6 @@ RUN apt-get update \
   && chmod 0440 /etc/sudoers.d/$USERNAME \
   && rm -rf /var/lib/apt/lists/*
 
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-
 # apt-get installations
 RUN apt-get update \
   && apt-get install -y \
@@ -30,6 +28,7 @@ RUN apt-get update \
   python3-scipy \
   libportaudio2 \
   portaudio19-dev \
+  alsa-utils \
   ros-humble-std-msgs \
   ros-humble-rosidl-default-generators \
   ros-humble-rosidl-default-runtime \
@@ -65,7 +64,7 @@ RUN apt-get update \
 RUN pip3 install \
   pyserial \
   inputs \
-  numpy \
+  numpy==1.21.5 \
   ArducamDepthCamera \
   opencv-python \
   pyaudio \
@@ -76,7 +75,10 @@ RUN pip3 install \
   pillow \
   mss \
   python-dotenv \
-  "numpy<2.0.0"
+  exceptiongroup>=1.2.2 \
+  mcp[cli]>=1.6.0 \
+  taskgroup>=0.2.2 \
+  uv
 
 RUN usermod -a -G dialout ${USERNAME}
 RUN usermod -a -G video ${USERNAME}
@@ -87,11 +89,13 @@ RUN echo "export ROS_DOMAIN_ID=7" >> ~/.bashrc \
  && echo "export QT_SCALE_FACTOR=1" >> ~/.bashrc \
  && echo "export DISPLAY=:0" >> ~/.bashrc
 
- # Copy the entrypoint and bashrc scripts so we have
+# Copy the entrypoint and bashrc scripts so we have
 # our container's environment set up correctly
 COPY rpi_entrypoint.sh /entrypoint.sh
 COPY rpi_bashrc /home/${USERNAME}/.bashrc
 COPY rpi_bashrc /root/.bashrc
+
+WORKDIR /wilson
 
 # Set up entrypoint and default command
 ENTRYPOINT ["/bin/bash", "/entrypoint.sh"]

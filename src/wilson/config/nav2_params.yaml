@@ -28,8 +28,8 @@ amcl:
     z_rand: 0.05
     z_max: 0.05
 
-    # Beam skipping (ignore dynamic obstacles)
-    do_beamskip: true
+    # Beam skipping
+    do_beamskip: False
     beam_skip_distance: 0.5
     beam_skip_threshold: 0.3
     beam_skip_error_threshold: 0.9
@@ -38,7 +38,7 @@ amcl:
     min_particles: 800
     max_particles: 1500       # balanced for RPi5: good localization with manageable CPU load
     pf_err: 0.03
-    pf_z: 0.995
+    pf_z: 0.99
     resample_interval: 2      # resample every 2 updates instead of every one
 
     # Update thresholds (balanced for CPU and accuracy)
@@ -167,7 +167,7 @@ controller_server:
       decel_lim_theta: -3.2
       vx_samples: 12              # reduced from 20 for RPi5 efficiency
       vy_samples: 3               # reduced from 5 for RPi5 efficiency
-      vtheta_samples: 15          # reduced from 20 for RPi5 efficiency
+      vtheta_samples: 18          # balanced for path quality and efficiency
       sim_time: 1.5               # slightly reduced prediction horizon
       linear_granularity: 0.05
       angular_granularity: 0.025
@@ -204,8 +204,8 @@ local_costmap:
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 2.0
-        inflation_radius: 0.15
+        cost_scaling_factor: 1.5
+        inflation_radius: 0.10
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -262,8 +262,8 @@ global_costmap:
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 2.0
-        inflation_radius: 0.15
+        cost_scaling_factor: 1.5
+        inflation_radius: 0.10
       always_send_full_costmap: True
 
 map_server:

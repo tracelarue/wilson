@@ -172,7 +172,7 @@ def generate_launch_description():
     )
 
     gemini_ros_mcp = ExecuteProcess(
-        cmd=['tilix', '-e', 'python3', 'gemini_client.py', '--responses', 'TEXT'],
+        cmd=['tilix', '-e', 'python3', 'gemini_client.py'],
         cwd=gemini_mcp_path,
         output='screen',
     )

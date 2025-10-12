@@ -2,7 +2,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, TimerAction, ExecuteProcess
-from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.launch_description_sources import PythonLaunchDescriptionSource, AnyLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -10,6 +10,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
 
     package_name = 'wilson'
+    gemini_mcp_path = '/wilson/src/gemini_mcp'
     
     # Load real robot parameters
     real_params_file = os.path.join(get_package_share_directory(package_name), 'config', 'real_params.yaml')
@@ -27,7 +28,7 @@ def generate_launch_description():
     
     declare_map_yaml = DeclareLaunchArgument(
         'map',
-        default_value=os.path.join(get_package_share_directory(package_name), 'maps', 'downstairs_sim.yaml'),
+        default_value=os.path.join(get_package_share_directory(package_name), 'maps', 'downstairs_save.yaml'),
         description='Full path to map yaml file'
     )
     
@@ -108,6 +109,30 @@ def generate_launch_description():
         output='screen',
     )
 
+        # for use with ros-mcp-server
+    rosbridge_server = IncludeLaunchDescription(
+        AnyLaunchDescriptionSource(
+            os.path.join(get_package_share_directory('rosbridge_server'), 'launch', 'rosbridge_websocket_launch.xml')
+        )
+    )
+    
+    # Timed optional processes
+    rosbridge_timer = TimerAction(
+        period=1.0,
+        actions=[rosbridge_server]
+    )
+
+    gemini_ros_mcp = ExecuteProcess(
+        cmd=['tilix', '-e', 'python3', 'gemini_client.py', '--mode=robot'],
+        cwd=gemini_mcp_path,
+        output='screen',
+    )
+
+    gemini_ros_mcp_timer = TimerAction(
+        period=3.0,
+        actions=[gemini_ros_mcp]
+    )
+
 
     # Teleop keyboard in separate terminal
     teleop = ExecuteProcess(
@@ -115,6 +140,25 @@ def generate_launch_description():
         output='screen',
     )
 
+    # Initial pose publisher - sets 2D pose estimate for AMCL
+    initial_pose_publisher = Node(
+        package='wilson',
+        executable='initial_pose_publisher.py',
+        name='initial_pose_publisher',
+        parameters=[
+            {'initial_pose_x': LaunchConfiguration('initial_pose_x')},
+            {'initial_pose_y': LaunchConfiguration('initial_pose_y')},
+            {'initial_pose_yaw': LaunchConfiguration('initial_pose_yaw')},
+            {'use_sim_time': False}
+        ],
+        output='screen'
+    )
+
+    # Timer for initial pose publisher - start after localization is ready
+    initial_pose_timer = TimerAction(
+        period=30.0,  # Wait for gazebo to be ready
+        actions=[initial_pose_publisher]
+    )
 
     return LaunchDescription([
         declare_use_sim_time,
@@ -126,4 +170,7 @@ def generate_launch_description():
         localization_timer,
         #gemini,
         teleop,
+        rosbridge_timer,
+        gemini_ros_mcp_timer,
+        #initial_pose_timer
     ])

@@ -31,7 +31,7 @@ AUDIO_FORMAT = pyaudio.paInt16
 AUDIO_CHANNELS = 1
 SEND_SAMPLE_RATE = 16000
 RECEIVE_SAMPLE_RATE = 24000
-CHUNK_SIZE = 1024
+CHUNK_SIZE = 11520
 
 # Gemini Live model and default settings
 MODEL = "models/gemini-2.5-flash-live-preview"
@@ -41,15 +41,16 @@ DEFAULT_RESPONSE_MODALITY = "AUDIO"  # Options: "TEXT", "AUDIO"
 # System instructions to guide Gemini's behavior and tool usage.
 system_instructions = """
     You have access to the tools provided by ros_mcp_server.
-    Start by connecting to the robot on ip 192.168.52.129, port 9090.
+    Start by connecting to the robot on ip 192.168.1.30, port 9090.
     When successfuly connected, reply just "Succesfully connected".
     You can go to known locations.
     Known locations are:
-    origin = {0,0,0} {0,0,0,1}
-    door = {1,1,0} {0,0,0,1}
-    mini fridge = {1,0,0} {0,0,0,1}
-    kitchen = {-1, 3, 0} {0,0,0,1}
-    living room = {-1,-3,0} {0,0,0,1}
+    - kitchen = {2.5, -5.94, 0} {0,0,0,1}
+    - living room = {1.6, 0.0, 0} {0,0,0,1}
+    - front door = {-0.1, -7.94, 0} {0,0,0,1}
+    - back door = {0.0, -0.41, 0} {0,0,0,1}
+    - dining room = {0.1, -3.44, 0} {0,0,0,1}
+    - restroom = {3.2, -7.94, 0} {0,0,0,1}
 
     When receiving a tool result from send_action_goal use the status field. Status=4 means success. If the tool response is empty assume success.
     """
@@ -102,6 +103,109 @@ def load_mcp_config():
 
     server_config = config["mcpServers"]["ros-mcp-server"]
     return server_config
+
+
+def list_audio_devices():
+    """
+    List all available PyAudio devices for debugging.
+
+    Returns:
+        tuple: (default_input_index, default_output_index, all_devices_info)
+    """
+    pya_temp = pyaudio.PyAudio()
+    devices_info = []
+
+    try:
+        default_input = pya_temp.get_default_input_device_info()
+        default_input_index = default_input['index']
+    except Exception:
+        default_input_index = None
+
+    try:
+        default_output = pya_temp.get_default_output_device_info()
+        default_output_index = default_output['index']
+    except Exception:
+        default_output_index = None
+
+    print("\n" + "="*60)
+    print("Available Audio Devices:")
+    print("="*60)
+
+    for i in range(pya_temp.get_device_count()):
+        try:
+            info = pya_temp.get_device_info_by_index(i)
+            devices_info.append(info)
+
+            device_type = []
+            if info['maxInputChannels'] > 0:
+                device_type.append("INPUT")
+                if i == default_input_index:
+                    device_type.append("(DEFAULT INPUT)")
+            if info['maxOutputChannels'] > 0:
+                device_type.append("OUTPUT")
+                if i == default_output_index:
+                    device_type.append("(DEFAULT OUTPUT)")
+
+            type_str = " | ".join(device_type) if device_type else "UNAVAILABLE"
+
+            print(f"[{i}] {info['name']}")
+            print(f"    Type: {type_str}")
+            print(f"    Channels: In={info['maxInputChannels']}, Out={info['maxOutputChannels']}")
+            print(f"    Sample Rate: {int(info['defaultSampleRate'])} Hz")
+            print()
+        except Exception as e:
+            print(f"[{i}] Error reading device: {e}")
+            print()
+
+    print("="*60 + "\n")
+    pya_temp.terminate()
+
+    return default_input_index, default_output_index, devices_info
+
+
+def find_audio_device(device_index, device_type="input"):
+    """
+    Validate and find an audio device, with fallback to default.
+
+    Args:
+        device_index: Specific device index to use, or None for default
+        device_type: "input" or "output"
+
+    Returns:
+        int or None: Valid device index
+    """
+    pya_temp = pyaudio.PyAudio()
+
+    try:
+        # If specific index is requested, validate it
+        if device_index is not None:
+            try:
+                info = pya_temp.get_device_info_by_index(device_index)
+                if device_type == "input" and info['maxInputChannels'] > 0:
+                    pya_temp.terminate()
+                    return device_index
+                elif device_type == "output" and info['maxOutputChannels'] > 0:
+                    pya_temp.terminate()
+                    return device_index
+                else:
+                    print(f"⚠️  Device {device_index} doesn't support {device_type}, using default instead")
+            except Exception as e:
+                print(f"⚠️  Device {device_index} not available: {e}")
+                print(f"   Falling back to default {device_type} device")
+
+        # Fall back to default device
+        if device_type == "input":
+            default_info = pya_temp.get_default_input_device_info()
+        else:
+            default_info = pya_temp.get_default_output_device_info()
+
+        pya_temp.terminate()
+        return default_info['index']
+
+    except Exception as e:
+        print(f"🔴 Error finding {device_type} device: {e}")
+        pya_temp.terminate()
+        return None
 
 
 # Load server configuration
@@ -176,7 +280,8 @@ class AudioLoop:
 
         # Audio format constants
         self.format = pyaudio.paInt16
-        self.chunk_size = 1024
+        self.chunk_size = 11520
+        self.received_audio_buffer = 11520
         self.api_sample_rate = 16000  # Gemini API input rate
         self.api_output_sample_rate = 24000  # Gemini API output rate
 
@@ -192,9 +297,10 @@ class AudioLoop:
         elif self.mode == "robot":
             # Robot mode - hardware-specific settings
             self.mic_channels = 1
-            self.speaker_channels = 2
-            self.mic_index = 2  # Specific microphone device
-            self.speaker_index = 1  # Specific speaker device
+            self.speaker_channels = 1
+            # Validate device indices, fall back to defaults if unavailable
+            self.mic_index = find_audio_device(2, "input")  # Try device 3, fall back to default
+            self.speaker_index = find_audio_device(0, "output")  # Try device 2, fall back to default
             self.mic_sample_rate = 48000  # Hardware sample rate (needs resampling)
             self.speaker_sample_rate = 48000  # Hardware sample rate (needs resampling)
         else:
@@ -623,6 +729,7 @@ class AudioLoop:
             rate=self.speaker_sample_rate,
             output=True,
             output_device_index=self.speaker_index,
+            frames_per_buffer=self.received_audio_buffer,
         )
 
         audio_playing = False
@@ -849,7 +956,8 @@ class AudioLoop:
                     pass
                 except asyncio.ExceptionGroup as exception_group:
                     # Handle any errors that occurred in the task group
-                    self.audio_stream.close()
+                    if hasattr(self, 'audio_stream') and self.audio_stream is not None:
+                        self.audio_stream.close()
                     traceback.print_exception(exception_group)
 
 
@@ -886,6 +994,10 @@ if __name__ == "__main__":
         help="Mute microphone during audio playback (true/false, default: true)",
     )
     args = parser.parse_args()
+
+    # List available audio devices for debugging
+    print(f"\n🔧 Initializing in '{args.mode}' mode with video='{args.video}' and responses='{args.responses}'")
+    list_audio_devices()
 
     # Initialize and run the audio loop
     audio_loop = AudioLoop(
