@@ -10,12 +10,13 @@ find_package(ament_cmake REQUIRED)
 find_package(moveit_task_constructor_core REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 
 add_executable(mtc_tutorial src/mtc_tutorial.cpp)
-ament_target_dependencies(mtc_tutorial moveit_task_constructor_core rclcpp tf2_ros)
+ament_target_dependencies(mtc_tutorial moveit_task_constructor_core rclcpp tf2_ros tf2_geometry_msgs)
 target_include_directories(mtc_tutorial PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
