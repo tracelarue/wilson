@@ -76,8 +76,6 @@ Visualization Manager:
       Markers:
         All at once?: false
         Value: true
-        approach_object: true
-        lift_object: true
       Name: Motion Planning Tasks
       Robot:
         Fixed Robot Color: 150; 50; 150
@@ -87,23 +85,57 @@ Visualization Manager:
           Expand Link Details: false
           Expand Tree: false
           Link Tree Style: Links in Alphabetic Order
+          base_footprint:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
           base_link:
             Alpha: 1
             Show Axes: false
             Show Trail: false
+          body_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
             Value: true
+          camera_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          camera_link_optical:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+          depth_camera_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          depth_camera_link_optical:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
           end_effector_frame:
             Alpha: 1
             Show Axes: false
             Show Trail: false
-          end_effector_roll_virtual:
+            Value: true
+          end_effector_roll:
             Alpha: 1
             Show Axes: false
             Show Trail: false
-          end_effector_yaw_virtual:
+            Value: true
+          end_effector_yaw:
             Alpha: 1
             Show Axes: false
             Show Trail: false
+            Value: true
+          front_caster_wheel:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
           gripper_base:
             Alpha: 1
             Show Axes: false
@@ -115,6 +147,16 @@ Visualization Manager:
             Show Trail: false
             Value: true
           gripper_right_finger:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          laser_frame:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          left_wheel:
             Alpha: 1
             Show Axes: false
             Show Trail: false
@@ -139,10 +181,16 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
             Value: true
-          world:
+          rear_caster_wheel:
             Alpha: 1
             Show Axes: false
             Show Trail: false
+            Value: true
+          right_wheel:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
         Robot Alpha: 0.5
         Show Robot Collision: false
         Show Robot Visual: true
@@ -160,7 +208,7 @@ Visualization Manager:
       State Display Time: 0.05 s
       Task Solution Topic: /solution
       Tasks:
-        chessaton demo task: 5
+        chessaton demo task: 0
       Trail Step Size: 1
       Value: true
     - Class: moveit_rviz_plugin/PlanningScene
@@ -184,23 +232,57 @@ Visualization Manager:
           Expand Link Details: false
           Expand Tree: false
           Link Tree Style: Links in Alphabetic Order
+          base_footprint:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
           base_link:
             Alpha: 1
             Show Axes: false
             Show Trail: false
+          body_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
             Value: true
+          camera_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          camera_link_optical:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+          depth_camera_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          depth_camera_link_optical:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
           end_effector_frame:
             Alpha: 1
             Show Axes: false
             Show Trail: false
-          end_effector_roll_virtual:
+            Value: true
+          end_effector_roll:
             Alpha: 1
             Show Axes: false
             Show Trail: false
-          end_effector_yaw_virtual:
+            Value: true
+          end_effector_yaw:
             Alpha: 1
             Show Axes: false
             Show Trail: false
+            Value: true
+          front_caster_wheel:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
           gripper_base:
             Alpha: 1
             Show Axes: false
@@ -212,6 +294,16 @@ Visualization Manager:
             Show Trail: false
             Value: true
           gripper_right_finger:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          laser_frame:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          left_wheel:
             Alpha: 1
             Show Axes: false
             Show Trail: false
@@ -236,10 +328,16 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
             Value: true
-          world:
+          rear_caster_wheel:
             Alpha: 1
             Show Axes: false
             Show Trail: false
+            Value: true
+          right_wheel:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
         Robot Alpha: 1
         Show Robot Collision: false
         Show Robot Visual: true
@@ -289,23 +387,57 @@ Visualization Manager:
           Expand Link Details: false
           Expand Tree: false
           Link Tree Style: Links in Alphabetic Order
+          base_footprint:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
           base_link:
             Alpha: 1
             Show Axes: false
             Show Trail: false
+          body_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
             Value: true
+          camera_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          camera_link_optical:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+          depth_camera_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          depth_camera_link_optical:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
           end_effector_frame:
             Alpha: 1
             Show Axes: false
             Show Trail: false
-          end_effector_roll_virtual:
+            Value: true
+          end_effector_roll:
             Alpha: 1
             Show Axes: false
             Show Trail: false
-          end_effector_yaw_virtual:
+            Value: true
+          end_effector_yaw:
             Alpha: 1
             Show Axes: false
             Show Trail: false
+            Value: true
+          front_caster_wheel:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
           gripper_base:
             Alpha: 1
             Show Axes: false
@@ -317,6 +449,16 @@ Visualization Manager:
             Show Trail: false
             Value: true
           gripper_right_finger:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          laser_frame:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          left_wheel:
             Alpha: 1
             Show Axes: false
             Show Trail: false
@@ -341,10 +483,16 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
             Value: true
-          world:
+          rear_caster_wheel:
             Alpha: 1
             Show Axes: false
             Show Trail: false
+            Value: true
+          right_wheel:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
         Loop Animation: false
         Robot Alpha: 0.5
         Robot Color: 150; 50; 150
@@ -368,7 +516,7 @@ Visualization Manager:
         Goal State Color: 250; 128; 0
         Interactive Marker Size: 0
         Joint Violation Color: 255; 0; 255
-        Planning Group: arm_group
+        Planning Group: arm
         Query Goal State: true
         Query Start State: false
         Show Workspace: false
@@ -391,23 +539,57 @@ Visualization Manager:
           Expand Link Details: false
           Expand Tree: false
           Link Tree Style: Links in Alphabetic Order
+          base_footprint:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
           base_link:
             Alpha: 1
             Show Axes: false
             Show Trail: false
+          body_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
             Value: true
+          camera_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          camera_link_optical:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+          depth_camera_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          depth_camera_link_optical:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
           end_effector_frame:
             Alpha: 1
             Show Axes: false
             Show Trail: false
-          end_effector_roll_virtual:
+            Value: true
+          end_effector_roll:
             Alpha: 1
             Show Axes: false
             Show Trail: false
-          end_effector_yaw_virtual:
+            Value: true
+          end_effector_yaw:
             Alpha: 1
             Show Axes: false
             Show Trail: false
+            Value: true
+          front_caster_wheel:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
           gripper_base:
             Alpha: 1
             Show Axes: false
@@ -419,6 +601,16 @@ Visualization Manager:
             Show Trail: false
             Value: true
           gripper_right_finger:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          laser_frame:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          left_wheel:
             Alpha: 1
             Show Axes: false
             Show Trail: false
@@ -443,10 +635,16 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
             Value: true
-          world:
+          rear_caster_wheel:
             Alpha: 1
             Show Axes: false
             Show Trail: false
+            Value: true
+          right_wheel:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
         Robot Alpha: 1
         Show Robot Collision: false
         Show Robot Visual: true
@@ -512,18 +710,18 @@ Visualization Manager:
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -0.04977421462535858
-        Y: 0.10991979390382767
-        Z: -0.07840107381343842
+        X: 0.18469487130641937
+        Y: -0.13426551222801208
+        Z: -0.08523780107498169
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.8853980302810669
+      Pitch: 0.7103981375694275
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 0.7403993606567383
+      Yaw: 0.9353992938995361
     Saved: ~
 Window Geometry:
   Displays:
@@ -547,5 +745,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1240
-  X: 39
-  Y: 28
+  X: 651
+  Y: 56

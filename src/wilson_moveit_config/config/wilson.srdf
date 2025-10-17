@@ -25,18 +25,24 @@
         <joint name="joint_2" value="0.3049"/>
         <joint name="joint_3" value="-2.3562"/>
         <joint name="joint_4" value="0.5821"/>
+        <joint name="end_effector_roll_joint" value="0"/>
+        <joint name="end_effector_yaw_joint" value="0"/>
     </group_state>
     <group_state name="idle" group="arm">
         <joint name="joint_1" value="0"/>
         <joint name="joint_2" value="0.2495"/>
         <joint name="joint_3" value="-2.3562"/>
         <joint name="joint_4" value="-0.6098"/>
+        <joint name="end_effector_roll_joint" value="0"/>
+        <joint name="end_effector_yaw_joint" value="0"/>
     </group_state>
     <group_state name="zero" group="arm">
         <joint name="joint_1" value="0"/>
         <joint name="joint_2" value="0"/>
         <joint name="joint_3" value="0"/>
         <joint name="joint_4" value="0"/>
+        <joint name="end_effector_roll_joint" value="0"/>
+        <joint name="end_effector_yaw_joint" value="0"/>
     </group_state>
     <group_state name="open" group="gripper">
         <joint name="gripper_left_finger_joint" value="0.05"/>

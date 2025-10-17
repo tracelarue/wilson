@@ -5,34 +5,33 @@
 #include <moveit/task_constructor/solvers.h>
 #include <moveit/task_constructor/stages.h>
 
-static const rclcpp::Logger LOGGER = rclcpp::get_logger("mtc_tutorial");
+static const rclcpp::Logger LOGGER = rclcpp::get_logger("can_pick");
 namespace mtc = moveit::task_constructor;
 
-class MTCTaskNode {
+class CanPickNode {
 public:
-    MTCTaskNode(const rclcpp::NodeOptions& options);
+    CanPickNode(const rclcpp::NodeOptions& options);
 
     rclcpp::node_interfaces::NodeBaseInterface::SharedPtr getNodeBaseInterface();
 
     void doTask();
 
 private:
-    // Compose an MTC task from a series of stages.
     mtc::Task createTask();
     mtc::Task task_;
     rclcpp::Node::SharedPtr node_;
 };
 
-rclcpp::node_interfaces::NodeBaseInterface::SharedPtr MTCTaskNode::getNodeBaseInterface() {
+rclcpp::node_interfaces::NodeBaseInterface::SharedPtr CanPickNode::getNodeBaseInterface() {
     return node_->get_node_base_interface();
 }
 
-MTCTaskNode::MTCTaskNode(const rclcpp::NodeOptions& options)
-  : node_{ std::make_shared<rclcpp::Node>("mtc_node", options) }
+CanPickNode::CanPickNode(const rclcpp::NodeOptions& options)
+  : node_{ std::make_shared<rclcpp::Node>("can_pick_node", options) }
 {
 }
 
-void MTCTaskNode::doTask() {
+void CanPickNode::doTask() {
     task_ = createTask();
 
     try
@@ -62,9 +61,9 @@ void MTCTaskNode::doTask() {
     return;
 }
 
-mtc::Task MTCTaskNode::createTask() {
+mtc::Task CanPickNode::createTask() {
     mtc::Task task;
-    task.stages()->setName("wilson simple motion task");
+    task.stages()->setName("can pick task");
     task.loadRobotModel(node_);
 
     const auto& arm_group_name = "arm";
@@ -76,7 +75,7 @@ mtc::Task MTCTaskNode::createTask() {
     task.setProperty("eef", hand_group_name);
     task.setProperty("ik_frame", hand_frame);
 
-    // Planners
+    // Sampling planner
     auto sampling_planner = std::make_shared<mtc::solvers::PipelinePlanner>(node_);
     auto interpolation_planner = std::make_shared<mtc::solvers::JointInterpolationPlanner>();
 
@@ -87,66 +86,63 @@ mtc::Task MTCTaskNode::createTask() {
     cartesian_planner->setStepSize(.01);
 
     /****************************************************
-	 *                                                  *
-	 *               Current State                      *
-	 *                                                  *
-	 ****************************************************/
+     *               Current State                      *
+     ****************************************************/
     {
-        auto stage_state_current = std::make_unique<mtc::stages::CurrentState>("current");
-        task.add(std::move(stage_state_current));
+        auto stage = std::make_unique<mtc::stages::CurrentState>("current");
+        task.add(std::move(stage));
     }
 
     /****************************************************
-	 *                                                  *
-	 *               Move to Ready                      *
-	 *                                                  *
-	 ****************************************************/
+     *               Move to Ready                      *
+     ****************************************************/
     {
         auto stage = std::make_unique<mtc::stages::MoveTo>("move to ready", interpolation_planner);
-        stage->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
+        stage->setGroup(arm_group_name);
         stage->setGoal("ready");
         task.add(std::move(stage));
     }
 
     /****************************************************
-	 *                                                  *
-	 *               Open Gripper                       *
-	 *                                                  *
-	 ****************************************************/
+     *               Open Gripper                       *
+     ****************************************************/
     {
-        auto stage_open_hand =
-            std::make_unique<mtc::stages::MoveTo>("open gripper", interpolation_planner);
-        stage_open_hand->setGroup(hand_group_name);
-        stage_open_hand->setGoal("open");
-        task.add(std::move(stage_open_hand));
+        auto stage = std::make_unique<mtc::stages::MoveTo>("open gripper", interpolation_planner);
+        stage->setGroup(hand_group_name);
+        stage->setGoal("open");
+        task.add(std::move(stage));
     }
 
     /****************************************************
-	 *                                                  *
-	 *               Move to Target Point               *
-	 *                                                  *
-	 ****************************************************/
+     *       Move to Target (relative to depth cam)    *
+     ****************************************************/
     {
         auto stage = std::make_unique<mtc::stages::MoveTo>("move to target", sampling_planner);
-        stage->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
+        stage->setGroup(arm_group_name);
+        stage->setIKFrame(hand_frame);
 
-        // Set target pose
+        // Define target pose relative to depth_cam_optical_link
         geometry_msgs::msg::PoseStamped target_pose;
         target_pose.header.frame_id = "world";
-        target_pose.pose.position.x = 0.4;
-        target_pose.pose.position.y = 0.1;
-        target_pose.pose.position.z = 0.2;
-        target_pose.pose.orientation.w = 1.0;  // Identity quaternion
+
+        // Adjust these values based on where you want to reach
+        target_pose.pose.position.x = 0.4;  // 30cm in front of camera
+        target_pose.pose.position.y = 0.0;  // centered
+        target_pose.pose.position.z = 0.1;  // at camera height
+
+        // Orientation (gripper facing down or as needed)
+        target_pose.pose.orientation.w = 1.0;
+        target_pose.pose.orientation.x = 0.0;
+        target_pose.pose.orientation.y = 0.0;
+        target_pose.pose.orientation.z = 0.0;
 
         stage->setGoal(target_pose);
         task.add(std::move(stage));
     }
 
     /****************************************************
-	 *                                                  *
-	 *               Close Gripper                      *
-	 *                                                  *
-	 ****************************************************/
+     *               Close Gripper                      *
+     ****************************************************/
     {
         auto stage = std::make_unique<mtc::stages::MoveTo>("close gripper", interpolation_planner);
         stage->setGroup(hand_group_name);
@@ -155,13 +151,11 @@ mtc::Task MTCTaskNode::createTask() {
     }
 
     /****************************************************
-	 *                                                  *
-	 *               Return to Ready                    *
-	 *                                                  *
-	 ****************************************************/
+     *               Return to Ready                    *
+     ****************************************************/
     {
         auto stage = std::make_unique<mtc::stages::MoveTo>("return to ready", interpolation_planner);
-        stage->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
+        stage->setGroup(arm_group_name);
         stage->setGoal("ready");
         task.add(std::move(stage));
     }
@@ -175,16 +169,16 @@ int main(int argc, char** argv) {
     rclcpp::NodeOptions options;
     options.automatically_declare_parameters_from_overrides(true);
 
-    auto mtc_task_node = std::make_shared<MTCTaskNode>(options);
+    auto can_pick_node = std::make_shared<CanPickNode>(options);
     rclcpp::executors::MultiThreadedExecutor executor;
 
-    auto spin_thread = std::make_unique<std::thread>([&executor, &mtc_task_node]() {
-      executor.add_node(mtc_task_node->getNodeBaseInterface());
+    auto spin_thread = std::make_unique<std::thread>([&executor, &can_pick_node]() {
+      executor.add_node(can_pick_node->getNodeBaseInterface());
       executor.spin();
-      executor.remove_node(mtc_task_node->getNodeBaseInterface());
+      executor.remove_node(can_pick_node->getNodeBaseInterface());
     });
 
-    mtc_task_node->doTask();
+    can_pick_node->doTask();
 
     spin_thread->join();
     rclcpp::shutdown();

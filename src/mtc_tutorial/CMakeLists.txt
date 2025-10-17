@@ -21,7 +21,14 @@ target_include_directories(mtc_tutorial PUBLIC
   $<INSTALL_INTERFACE:include>)
 target_compile_features(mtc_tutorial PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 
-install(TARGETS mtc_tutorial
+add_executable(can_pick src/can_pick.cpp)
+ament_target_dependencies(can_pick moveit_task_constructor_core rclcpp tf2_ros)
+target_include_directories(can_pick PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_compile_features(can_pick PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+
+install(TARGETS mtc_tutorial can_pick
   DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY launch 
