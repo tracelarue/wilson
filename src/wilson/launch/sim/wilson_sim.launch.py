@@ -7,6 +7,7 @@ from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, Time
 from launch.launch_description_sources import PythonLaunchDescriptionSource, AnyLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from moveit_configs_utils import MoveItConfigsBuilder
 
 
 def load_yaml_params(file_path):
@@ -126,6 +127,24 @@ def generate_launch_description():
         }.items(),
     )
 
+    # Load MoveIt configuration (adjust the package name to match your robot's MoveIt config)
+    moveit_config = MoveItConfigsBuilder("wilson", package_name="wilson_moveit_config").to_moveit_configs()
+
+    # Pick Object Action Server Node
+    pick_action_server_node = Node(
+        package="pick_place_action",
+        executable="pick_object_action_server",
+        name="pick_object_action_server",
+        output="screen",
+        parameters=[
+            moveit_config.robot_description,
+            moveit_config.robot_description_semantic,
+            moveit_config.robot_description_kinematics,
+            moveit_config.planning_pipelines,
+            moveit_config.joint_limits,
+        ],
+    )
+
     # Timed launches to ensure proper startup sequence
     nav2_timer = TimerAction(
         period=3.0,
@@ -193,7 +212,7 @@ def generate_launch_description():
     
     # Timer for initial pose publisher - start after localization is ready
     initial_pose_timer = TimerAction(
-        period=20.0,  # Wait for gazebo to be ready
+        period=15.0,  # Wait for gazebo to be ready
         actions=[initial_pose_publisher]
     )
     
@@ -214,6 +233,7 @@ def generate_launch_description():
         nav2_timer,
         localization_timer,
         move_group_timer,
+        pick_action_server_node,
         initial_pose_timer,
         
         # Optional components

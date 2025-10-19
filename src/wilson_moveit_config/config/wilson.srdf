@@ -111,12 +111,18 @@
     <disable_collisions link1="gripper_left_finger" link2="rear_caster_wheel" reason="User"/>
     <disable_collisions link1="gripper_left_finger" link2="right_wheel" reason="User"/>
     <disable_collisions link1="gripper_left_finger" link2="gripper_right_finger" reason="User"/>
+    <disable_collisions link1="gripper_left_finger" link2="end_effector_frame" reason="User"/>
+    <disable_collisions link1="gripper_left_finger" link2="end_effector_roll" reason="User"/>
+    <disable_collisions link1="gripper_left_finger" link2="end_effector_yaw" reason="User"/>
     <disable_collisions link1="gripper_right_finger" link2="laser_frame" reason="User"/>
     <disable_collisions link1="gripper_right_finger" link2="left_wheel" reason="User"/>
     <disable_collisions link1="gripper_right_finger" link2="link_3" reason="Never"/>
     <disable_collisions link1="gripper_right_finger" link2="link_4" reason="Never"/>
     <disable_collisions link1="gripper_right_finger" link2="rear_caster_wheel" reason="User"/>
     <disable_collisions link1="gripper_right_finger" link2="right_wheel" reason="User"/>
+    <disable_collisions link1="gripper_right_finger" link2="end_effector_frame" reason="User"/>
+    <disable_collisions link1="gripper_right_finger" link2="end_effector_roll" reason="User"/>
+    <disable_collisions link1="gripper_right_finger" link2="end_effector_yaw" reason="User"/>
     <disable_collisions link1="laser_frame" link2="left_wheel" reason="Never"/>
     <disable_collisions link1="laser_frame" link2="link_1" reason="Never"/>
     <disable_collisions link1="laser_frame" link2="link_2" reason="Never"/>
@@ -143,4 +149,8 @@
     <disable_collisions link1="link_4" link2="rear_caster_wheel" reason="User"/>
     <disable_collisions link1="link_4" link2="right_wheel" reason="User"/>
     <disable_collisions link1="rear_caster_wheel" link2="right_wheel" reason="Never"/>
+    <disable_collisions link1="end_effector_roll" link2="end_effector_frame" reason="User"/>
+    <disable_collisions link1="end_effector_yaw" link2="end_effector_frame" reason="User"/>
+    <disable_collisions link1="end_effector_roll" link2="end_effector_yaw" reason="User"/>
+
 </robot>

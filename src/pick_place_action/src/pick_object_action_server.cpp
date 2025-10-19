@@ -91,18 +91,18 @@ private:
             target_point_in.point = goal->target_position;
 
             // Wait for transform
-            if (!tf_buffer_->canTransform("world", goal->target_frame, tf2::TimePointZero,
+            if (!tf_buffer_->canTransform("base_link", goal->target_frame, tf2::TimePointZero,
                                           tf2::durationFromSec(5.0))) {
-                RCLCPP_ERROR(LOGGER, "Cannot transform from '%s' to 'world'", goal->target_frame.c_str());
+                RCLCPP_ERROR(LOGGER, "Cannot transform from '%s' to 'base_link'", goal->target_frame.c_str());
                 result->success = false;
-                result->message = "Transform unavailable from " + goal->target_frame + " to world";
+                result->message = "Transform unavailable from " + goal->target_frame + " to base_link";
                 goal_handle->abort(result);
                 return;
             }
 
-            target_point_out = tf_buffer_->transform(target_point_in, "world");
+            target_point_out = tf_buffer_->transform(target_point_in, "base_link");
 
-            RCLCPP_INFO(LOGGER, "Transformed position to world frame: [%.3f, %.3f, %.3f]",
+            RCLCPP_INFO(LOGGER, "Transformed position to base_link frame: [%.3f, %.3f, %.3f]",
                         target_point_out.point.x, target_point_out.point.y, target_point_out.point.z);
 
             // Set up planning scene with object at transformed position
@@ -188,7 +188,7 @@ private:
 
         moveit_msgs::msg::CollisionObject object;
         object.id = "object";
-        object.header.frame_id = "world";
+        object.header.frame_id = "base_link";
         object.primitives.resize(1);
         object.primitives[0].type = shape_msgs::msg::SolidPrimitive::CYLINDER;
         object.primitives[0].dimensions = { obj_height, obj_radius };
@@ -208,22 +208,22 @@ private:
     geometry_msgs::msg::Vector3Stamped computeApproachVector(const geometry_msgs::msg::Point& object_position)
     {
         geometry_msgs::msg::Vector3Stamped approach_vec;
-        approach_vec.header.frame_id = "world";
+        approach_vec.header.frame_id = "base_link";
 
         try {
             // Wait for transform to be available
-            if (!tf_buffer_->canTransform("world", "link_1", tf2::TimePointZero,
+            if (!tf_buffer_->canTransform("base_link", "link_1", tf2::TimePointZero,
                                           tf2::durationFromSec(1.0))) {
-                RCLCPP_WARN(LOGGER, "Cannot get transform from link_1 to world, using default X direction");
+                RCLCPP_WARN(LOGGER, "Cannot get transform from link_1 to base_link, using default X direction");
                 approach_vec.vector.x = 1.0;
                 approach_vec.vector.y = 0.0;
                 approach_vec.vector.z = 0.0;
                 return approach_vec;
             }
 
-            // Get link_1 position in world frame
+            // Get link_1 position in base_link frame
             geometry_msgs::msg::TransformStamped transform =
-                tf_buffer_->lookupTransform("world", "link_1", tf2::TimePointZero);
+                tf_buffer_->lookupTransform("base_link", "link_1", tf2::TimePointZero);
 
             // Compute vector from link_1 to object
             double dx = object_position.x - transform.transform.translation.x;
@@ -399,7 +399,7 @@ private:
 
                 // Set upward direction
                 geometry_msgs::msg::Vector3Stamped vec;
-                vec.header.frame_id = "world";
+                vec.header.frame_id = "base_link";
                 vec.vector.z = 1.0;
                 stage->setDirection(vec);
                 grasp->insert(std::move(stage));

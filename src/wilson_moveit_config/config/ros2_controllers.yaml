@@ -27,7 +27,6 @@ arm_controller:
       - position
     state_interfaces:
       - position
-      #- velocity
     path_tolerance:
       joint_1: 0.1
       joint_2: 0.1
@@ -47,7 +46,6 @@ gripper_controller:
       - position
     state_interfaces:
       - position
-      #- velocity
     path_tolerance:
       gripper_left_finger_joint: 0.01
     goal_tolerance:
