@@ -76,8 +76,8 @@ Visualization Manager:
       Markers:
         All at once?: false
         Value: true
-        ik frame: true
-        target frame: true
+        approach_object: true
+        lift_object: true
       Name: Motion Planning Tasks
       Robot:
         Fixed Robot Color: 150; 50; 150
@@ -210,7 +210,7 @@ Visualization Manager:
       State Display Time: 0.05 s
       Task Solution Topic: /solution
       Tasks:
-        wilson simple motion task: 1
+        pick object task: 5
       Trail Step Size: 1
       Value: true
     - Class: moveit_rviz_plugin/PlanningScene
@@ -345,19 +345,90 @@ Visualization Manager:
         Show Robot Visual: true
       Value: true
     - Class: rviz_default_plugins/TF
-      Enabled: false
+      Enabled: true
       Frame Timeout: 15
       Frames:
         All Enabled: false
+        base_footprint:
+          Value: false
+        base_link:
+          Value: false
+        body_link:
+          Value: false
+        camera_link:
+          Value: false
+        camera_link_optical:
+          Value: false
+        depth_camera_link:
+          Value: false
+        depth_camera_link_optical:
+          Value: true
+        end_effector_frame:
+          Value: false
+        end_effector_roll:
+          Value: false
+        end_effector_yaw:
+          Value: false
+        front_caster_wheel:
+          Value: false
+        gripper_base:
+          Value: false
+        gripper_left_finger:
+          Value: false
+        gripper_right_finger:
+          Value: false
+        laser_frame:
+          Value: false
+        link_1:
+          Value: false
+        link_2:
+          Value: false
+        link_3:
+          Value: false
+        link_4:
+          Value: false
+        rear_caster_wheel:
+          Value: false
+        world:
+          Value: false
       Marker Scale: 1
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: false
       Tree:
-        {}
+        world:
+          base_link:
+            base_footprint:
+              {}
+            body_link:
+              camera_link:
+                camera_link_optical:
+                  {}
+              depth_camera_link:
+                depth_camera_link_optical:
+                  {}
+              front_caster_wheel:
+                {}
+              laser_frame:
+                {}
+              link_1:
+                link_2:
+                  link_3:
+                    link_4:
+                      gripper_base:
+                        end_effector_roll:
+                          end_effector_yaw:
+                            end_effector_frame:
+                              {}
+                        gripper_left_finger:
+                          {}
+                        gripper_right_finger:
+                          {}
+              rear_caster_wheel:
+                {}
       Update Interval: 0
-      Value: false
+      Value: true
     - Acceleration_Scaling_Factor: 0.1
       Class: moveit_rviz_plugin/MotionPlanning
       Enabled: true
@@ -712,18 +783,18 @@ Visualization Manager:
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.18469487130641937
-        Y: -0.13426551222801208
-        Z: -0.08523780107498169
+        X: 0.11060763150453568
+        Y: -0.21936790645122528
+        Z: 0.18610702455043793
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.7103981375694275
+      Pitch: 0.390398234128952
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 0.9353992938995361
+      Yaw: 0.7103995084762573
     Saved: ~
 Window Geometry:
   Displays:

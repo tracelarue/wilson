@@ -109,7 +109,7 @@ void MTCTaskNode::setupPlanningScene() {
 
     geometry_msgs::msg::Pose pose;
     pose.position.x = 0.45;
-    pose.position.y = 0.0;
+    pose.position.y = -.07;
     // to put the object above surface we bring the half that is below ground to top.
     pose.position.z = 0.1;
     object.pose = pose;
