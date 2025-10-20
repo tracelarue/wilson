@@ -75,9 +75,10 @@ def generate_launch_description():
     # Trajectory Execution
     trajectory_execution = {
         'moveit_manage_controllers': True,
-        'trajectory_execution.allowed_execution_duration_scaling': 1.2,
-        'trajectory_execution.allowed_goal_duration_margin': 0.5,
+        'trajectory_execution.allowed_execution_duration_scaling': 2.0,
+        'trajectory_execution.allowed_goal_duration_margin': 2.0,
         'trajectory_execution.allowed_start_tolerance': 0.05,
+        'trajectory_execution.execution_duration_monitoring': False,
     }
 
     # Moveit Controllers

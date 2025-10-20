@@ -5,6 +5,7 @@
 #include <moveit/task_constructor/task.h>
 #include <moveit/task_constructor/solvers.h>
 #include <moveit/task_constructor/stages.h>
+#include <moveit/move_group_interface/move_group_interface.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -142,12 +143,17 @@ private:
             // Publish solution for visualization
             task.introspection().publishSolution(*task.solutions().front());
 
-            // Execute task
+            // Execute task using MoveGroupInterface
             feedback->current_stage = "Executing motion";
             feedback->progress_percentage = 60.0;
             goal_handle->publish_feedback(feedback);
 
-            auto execute_result = task.execute(*task.solutions().front());
+            // Create move group interfaces for execution
+            moveit::planning_interface::MoveGroupInterface move_group(shared_from_this(), "arm");
+            moveit::planning_interface::MoveGroupInterface gripper_group(shared_from_this(), "gripper");
+
+            // Execute the solution
+            auto execute_result = executeTaskSolution(*task.solutions().front(), move_group, gripper_group);
             if (execute_result.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS) {
                 RCLCPP_ERROR(LOGGER, "Task execution failed with error code: %d", execute_result.val);
                 result->success = false;
@@ -255,6 +261,66 @@ private:
         }
 
         return approach_vec;
+    }
+
+    // Helper function to recursively extract and execute all trajectories from a solution
+    moveit::core::MoveItErrorCode executeTaskSolution(
+        const mtc::SolutionBase& solution,
+        moveit::planning_interface::MoveGroupInterface& move_group,
+        moveit::planning_interface::MoveGroupInterface& gripper)
+    {
+        // Check if this is a SubTrajectory (leaf node)
+        if (const auto* sub_traj = dynamic_cast<const mtc::SubTrajectory*>(&solution)) {
+            auto traj = sub_traj->trajectory();
+            if (!traj || traj->empty()) {
+                return moveit::core::MoveItErrorCode::SUCCESS;  // Empty trajectory, skip
+            }
+
+            // Determine which group this trajectory belongs to
+            const auto& joint_names = traj->getFirstWayPoint().getVariableNames();
+            bool is_gripper = false;
+            for (const auto& name : joint_names) {
+                if (name.find("gripper") != std::string::npos) {
+                    is_gripper = true;
+                    break;
+                }
+            }
+
+            // Execute using appropriate move group
+            moveit::planning_interface::MoveGroupInterface::Plan plan;
+            robot_trajectory::RobotTrajectory non_const_traj(*traj);  // Create non-const copy
+            non_const_traj.getRobotTrajectoryMsg(plan.trajectory_);
+
+            moveit::core::MoveItErrorCode result;
+            if (is_gripper) {
+                RCLCPP_INFO(LOGGER, "Executing gripper trajectory");
+                result = gripper.execute(plan);
+            } else {
+                RCLCPP_INFO(LOGGER, "Executing arm trajectory");
+                result = move_group.execute(plan);
+            }
+
+            if (result.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS) {
+                RCLCPP_ERROR(LOGGER, "Trajectory execution failed with code: %d", result.val);
+                return result;
+            }
+        }
+        // Check if this is a SolutionSequence (container node)
+        else if (const auto* sequence = dynamic_cast<const mtc::SolutionSequence*>(&solution)) {
+            // Recursively execute all sub-solutions in order
+            for (const auto* sub_solution : sequence->solutions()) {
+                auto result = executeTaskSolution(*sub_solution, move_group, gripper);
+                if (result.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS) {
+                    return result;
+                }
+            }
+        }
+        // Check if this is a WrappedSolution
+        else if (const auto* wrapped = dynamic_cast<const mtc::WrappedSolution*>(&solution)) {
+            return executeTaskSolution(*wrapped->wrapped(), move_group, gripper);
+        }
+
+        return moveit::core::MoveItErrorCode::SUCCESS;
     }
 
     mtc::Task createTask(const geometry_msgs::msg::Point& object_position,

@@ -10,6 +10,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(moveit_task_constructor_core REQUIRED)
+find_package(moveit_ros_planning_interface REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -30,6 +31,7 @@ ament_target_dependencies(pick_object_action_server
   rclcpp
   rclcpp_action
   moveit_task_constructor_core
+  moveit_ros_planning_interface
   tf2_ros
   tf2_geometry_msgs
   geometry_msgs
