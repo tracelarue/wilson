@@ -130,30 +130,22 @@ https://github.com/ros-controls/ros2_control_demos/blob/foxy/ros2_control_demo_d
         </state_interface>
       </joint>
       <!-- gripper_right_finger_joint is now a mimic joint, no control interfaces needed -->
-      <!--
       <joint name="gripper_right_finger_joint">
         <command_interface name="position">
-          <param name="min">-0</param>
-          <param name="max">0.05</param>
+          <param name="min">-0.05</param>
+          <param name="max">0.0</param>
         </command_interface>
         <state_interface name="position">
           <param name="initial_value">0.0</param>
         </state_interface>
-        <state_interface name="velocity">
-          <param name="initial_value">0.0</param>
-        </state_interface>
       </joint>
-      -->
-      <!--
+      
       <joint name="end_effector_roll_joint">
         <command_interface name="position">
           <param name="min">-3.14</param>
           <param name="max">3.14</param>
         </command_interface>
         <state_interface name="position">
-          <param name="initial_value">0.0</param>
-        </state_interface>
-        <state_interface name="velocity">
           <param name="initial_value">0.0</param>
         </state_interface>
       </joint>
@@ -166,11 +158,7 @@ https://github.com/ros-controls/ros2_control_demos/blob/foxy/ros2_control_demo_d
         <state_interface name="position">
           <param name="initial_value">0.0</param>
         </state_interface>
-        <state_interface name="velocity">
-          <param name="initial_value">0.0</param>
-        </state_interface>
       </joint>
-      -->
     </ros2_control>
 
   </xacro:macro>

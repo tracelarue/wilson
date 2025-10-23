@@ -413,6 +413,8 @@ Window Geometry:
   Hide Right Dock: false
   Image:
     collapsed: false
+  Motion Planning Tasks:
+    collapsed: false
   MotionPlanning:
     collapsed: false
   MotionPlanning - Trajectory Slider:

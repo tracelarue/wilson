@@ -23,6 +23,12 @@
             <color rgba="${green}"/>
         </material>
         </visual>
+        <inertial>
+        <mass value="0.001"/>
+        <inertia ixx="0.000001" ixy="0.0"       ixz="0.0"
+                 iyy="0.000001" iyz="0.0"
+                 izz="0.000001"/>
+        </inertial>
     </link>
 
     <joint name="end_effector_yaw_joint" type="revolute">
@@ -42,6 +48,12 @@
             <color rgba="${green}"/>
         </material>
         </visual>
+        <inertial>
+        <mass value="0.001"/>
+        <inertia ixx="0.000001" ixy="0.0"       ixz="0.0"
+                 iyy="0.000001" iyz="0.0"
+                 izz="0.000001"/>
+        </inertial>
     </link>
 
     <!-- End effector frame -->
@@ -61,6 +73,12 @@
             <color rgba="${green}"/>
         </material>
         </visual>
+        <inertial>
+        <mass value="0.001"/>
+        <inertia ixx="0.000001" ixy="0.0"       ixz="0.0"
+                 iyy="0.000001" iyz="0.0"
+                 izz="0.000001"/>
+        </inertial>
     </link>
 
     <gazebo reference="end_effector_roll">

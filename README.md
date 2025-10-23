@@ -106,8 +106,9 @@ Follow these steps to set up Docker and run Wilson's simulation:
 3. **Create API key file** (for AI voice/text commands):
    Create a `.env` file in the wilson directory with your Google API key:
    ```.env
-   echo "GOOGLE_API_KEY="your_api_key_here" " > .env
+   GOOGLE_API_KEY="your_api_key_here"
    ```
+   API key Must be wrapped in " " . 
    Replace `your_api_key_here` with your actual Google Gemini API key from [Google AI Studio](https://aistudio.google.com). Without this file, Wilson will work but won't have AI-powered voice commands and object recognition capabilities.
 
 4. **Install Docker:**
@@ -137,8 +138,8 @@ Follow these steps to set up Docker and run Wilson's simulation:
 
 7. **Configure X11 forwarding for GUI applications:**
    ```bash
-   echo "xhost +" >> ~/.bashrc
    echo "xhost +local:docker" >> ~/.bashrc
+   source ~/.bashrc
    ```
 
 ### Running Wilson Simulation
@@ -157,7 +158,7 @@ Run these commands with `sudo` privileges:
 3. **Run the Wilson container:** (must be run from the wilson directory):
    ```bash
    sudo docker run -it --user ros --network=host --ipc=host \
-     -v $PWD:/wilson \
+     -v "$PWD":/wilson \
      -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
      --env=DISPLAY=:0 \
      --env=QT_X11_NO_MITSHM=1 \

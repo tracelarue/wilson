@@ -1,6 +1,8 @@
 # Default initial positions for wilson's ros2_control fake system
 
 initial_positions:
+  end_effector_roll_joint: 0
+  end_effector_yaw_joint: 0
   gripper_left_finger_joint: 0
   gripper_right_finger_joint: 0
   joint_1: 0
