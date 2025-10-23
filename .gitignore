@@ -3,6 +3,7 @@ log/
 build/
 install/
 .env
+Arducam_tof_camera/
 
 
 # Byte-compiled / optimized / DLL files
@@ -212,4 +213,5 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+core
 .vscode/settings.json

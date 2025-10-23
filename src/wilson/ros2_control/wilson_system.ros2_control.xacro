@@ -27,7 +27,7 @@ https://github.com/ros-controls/ros2_control_demos/blob/foxy/ros2_control_demo_d
             <param name="left_wheel_name">left_wheel_joint</param>
             <param name="right_wheel_name">right_wheel_joint</param>
             <param name="loop_rate">30</param>
-            <param name="device">/dev/ttyUSB0</param>
+            <param name="device">/dev/ttyUSB1</param>
             <param name="baud_rate">57600</param>
             <param name="timeout_ms">1000</param>
             <param name="enc_counts_per_rev">1320</param>
@@ -79,15 +79,15 @@ https://github.com/ros-controls/ros2_control_demos/blob/foxy/ros2_control_demo_d
         <xacro:unless value="${use_fake_hardware}">
           <hardware>
             <plugin>arduinobot_controller/ArduinobotInterface</plugin>
-            <param name="port">/dev/ttyUSB1</param>
+            <param name="port">/dev/ttyUSB2</param>
           </hardware>
         </xacro:unless>
       </xacro:unless>
 
       <joint name="joint_1">
         <command_interface name="position">
-          <param name="min">${-3*pi/4}</param>
-          <param name="max">${3*pi/4}</param>
+          <param name="min">-1.5708</param>
+          <param name="max">1.3090</param>
         </command_interface>
         <state_interface name="position">
           <param name="initial_value">0.0</param>
@@ -95,29 +95,29 @@ https://github.com/ros-controls/ros2_control_demos/blob/foxy/ros2_control_demo_d
       </joint>
       <joint name="joint_2">
         <command_interface name="position">
-          <param name="min">${-3*pi/4}</param>
-          <param name="max">${3*pi/4}</param>
+          <param name="min">-1.7453</param>
+          <param name="max">1.7453</param>
         </command_interface>
         <state_interface name="position">
-          <param name="initial_value">0.3049</param>
+          <param name="initial_value">0.2495</param>
         </state_interface>
       </joint>
       <joint name="joint_3">
         <command_interface name="position">
-          <param name="min">${-3*pi/4}</param>
-          <param name="max">${3*pi/4}</param>
+          <param name="min">-2.1817</param>
+          <param name="max">2.1817</param>
         </command_interface>
         <state_interface name="position">
-          <param name="initial_value">-2.3562</param>
+          <param name="initial_value">-2.1817</param>
         </state_interface>
       </joint>
       <joint name="joint_4">
         <command_interface name="position">
-          <param name="min">${-3*pi/4}</param>
-          <param name="max">${3*pi/4}</param>
+          <param name="min">-2.0944</param>
+          <param name="max">2.0944</param>
         </command_interface>
         <state_interface name="position">
-          <param name="initial_value">0.5821</param>
+          <param name="initial_value">-0.6098</param>
         </state_interface>
       </joint>
       <joint name="gripper_left_finger_joint">

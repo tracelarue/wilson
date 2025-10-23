@@ -87,6 +87,7 @@ RUN echo "export ROS_DOMAIN_ID=7" >> ~/.bashrc \
 # our container's environment set up correctly
 COPY entrypoint.sh /entrypoint.sh
 COPY bashrc /home/${USERNAME}/.bashrc
+COPY bashrc /root/.bashrc
 
 # Set up entrypoint and default command
 ENTRYPOINT ["/bin/bash", "/entrypoint.sh"]

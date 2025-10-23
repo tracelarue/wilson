@@ -6,6 +6,6 @@ initial_positions:
   gripper_left_finger_joint: 0
   gripper_right_finger_joint: 0
   joint_1: 0
-  joint_2: 0.3049
-  joint_3: -2.3562
-  joint_4: 0.5821
+  joint_2: 0.2495
+  joint_3: -2.1817
+  joint_4: -0.6098

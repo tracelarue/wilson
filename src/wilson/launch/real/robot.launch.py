@@ -145,8 +145,8 @@ def generate_launch_description():
         delayed_gripper_controller_spawner,
         delayed_jointstate_broadcaster_spawner,
         twist_mux,
-        #ld19_launch,
-        #tof_pointcloud,
-        #v4l2_camera_node,
+        ld19_launch,
+        tof_pointcloud,
+        v4l2_camera_node,
 
     ])

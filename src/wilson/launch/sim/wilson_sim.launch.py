@@ -21,6 +21,10 @@ def generate_launch_description():
     package_name = 'wilson'
     pkg_path = get_package_share_directory(package_name)
     
+    # Get workspace root - assumes wilson package is in src/wilson
+    workspace_root = os.path.abspath(os.path.join(pkg_path, '..', '..', '..', '..'))
+    gemini_mcp_path = os.path.join(workspace_root, 'src', 'gemini_mcp')
+    
     # Configuration files
     sim_params_file = os.path.join(pkg_path, 'config', 'sim_params.yaml')
     nav2_params_file = os.path.join(pkg_path, 'config', 'nav2_params.yaml')
@@ -186,13 +190,13 @@ def generate_launch_description():
 
     # Optional external processes
     gemini = ExecuteProcess(
-        cmd=['tilix', '-e', 'ros2', 'run', 'gemini', 'gemini_node', '--mode', 'sim', '--video', 'camera'],
+        cmd=['tilix', '-e', 'ros2', 'run', 'gemini', 'gemini_node', '--responses', 'TEXT'],
         output='screen',
     )
 
     # Teleop keyboard in separate terminal
     teleop = ExecuteProcess(
-        cmd=['tilix', '-e', 'ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap cmd_vel:=/diff_drive_controller/cmd_vel_unstamped'],
+        cmd=['tilix', '-e', 'ros2', 'run', 'teleop_twist_keyboard', 'teleop_twist_keyboard', '--ros-args', '--remap', 'cmd_vel:=/diff_drive_controller/cmd_vel_unstamped'],
         output='screen',
     )
     
@@ -210,7 +214,8 @@ def generate_launch_description():
     )
 
     gemini_ros_mcp = ExecuteProcess(
-        cmd=['tilix', '-e', 'cd /home/trace/wilson/gemini_live && uv run gemini_live.py'],
+        cmd=['tilix', '-e', 'python3', 'gemini_client.py'],
+        cwd=gemini_mcp_path,
         output='screen',
     )
 
@@ -260,8 +265,8 @@ def generate_launch_description():
         initial_pose_timer,
         
         # Optional components
-        gemini,
-        teleop,
+        #gemini,
+        #teleop,
         rosbridge_timer,
-        #gemini_ros_mcp_timer
+        gemini_ros_mcp_timer
     ])

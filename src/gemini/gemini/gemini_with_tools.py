@@ -69,18 +69,36 @@ def resample_audio(audio_data, original_rate, target_rate):
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-# Load environment variables from .env file in wilson directory
-env_path = '/wilson/.env'
-load_dotenv(dotenv_path=env_path)
-
-# API configuration
-GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 MODEL = "models/gemini-2.5-flash-live-preview"
 DEFAULT_MODE = "none"
 
+# Load Google API key from environment files in priority order
+# 1. First try /wilson/.env
+# 2. Then try /home/trace/wilson/.env
+env_paths = [
+    "/wilson/.env",
+    "/home/trace/wilson/.env",
+]
+
+api_key = None
+for env_path in env_paths:
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        api_key = os.environ.get("GOOGLE_API_KEY")
+        if api_key:
+            print(f"Loaded Google API key from {env_path}")
+            break
+
+if not api_key:
+    raise ValueError(
+        "GOOGLE_API_KEY not found. Please ensure it exists in either "
+        "/wilson/.env or /home/trace/wilson/.env"
+    )
+
+GOOGLE_API_KEY=api_key
 client = genai.Client(
     http_options={"api_version": "v1beta"},
-    api_key=GOOGLE_API_KEY,
+    api_key=api_key,
 )
 
 # Define navigation tool
