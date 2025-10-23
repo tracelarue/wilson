@@ -36,10 +36,31 @@
                 </state_interface>
                 <state_interface name="velocity"/>
             </joint>
+            <joint name="end_effector_roll_joint">
+                <command_interface name="position"/>
+                <state_interface name="position">
+                  <param name="initial_value">${initial_positions['end_effector_roll_joint']}</param>
+                </state_interface>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="end_effector_yaw_joint">
+                <command_interface name="position"/>
+                <state_interface name="position">
+                  <param name="initial_value">${initial_positions['end_effector_yaw_joint']}</param>
+                </state_interface>
+                <state_interface name="velocity"/>
+            </joint>
             <joint name="gripper_left_finger_joint">
                 <command_interface name="position"/>
                 <state_interface name="position">
                   <param name="initial_value">${initial_positions['gripper_left_finger_joint']}</param>
+                </state_interface>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="gripper_right_finger_joint">
+                <command_interface name="position"/>
+                <state_interface name="position">
+                  <param name="initial_value">${initial_positions['gripper_right_finger_joint']}</param>
                 </state_interface>
                 <state_interface name="velocity"/>
             </joint>

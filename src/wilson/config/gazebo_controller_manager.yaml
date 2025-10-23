@@ -27,8 +27,8 @@ arm_controller:
       - joint_2
       - joint_3
       - joint_4
-      #- end_effector_roll_joint
-      #- end_effector_yaw_joint
+      - end_effector_roll_joint
+      - end_effector_yaw_joint
     interface_name: position
     
     command_interfaces:
@@ -46,7 +46,7 @@ gripper_controller:
     use_sim_time: True
     joints: 
       - gripper_left_finger_joint
-      # gripper_right_finger_joint removed - it's now a mimic joint
+      - gripper_right_finger_joint
     interface_name: position
     
     command_interfaces:

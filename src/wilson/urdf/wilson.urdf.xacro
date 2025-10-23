@@ -7,7 +7,7 @@
     <xacro:arg name="fake_sensor_commands" default="false" />
 
     <xacro:include filename="wilson_core.xacro" />
-    <xacro:include filename="end_effector.xacro" />
+    <xacro:include filename="end_effector_collisions.xacro" />
     <xacro:include filename="wheels.xacro" />
     <xacro:include filename="lidar.xacro" />
     <xacro:include filename="camera.xacro" />
