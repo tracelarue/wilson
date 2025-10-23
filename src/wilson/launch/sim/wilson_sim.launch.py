@@ -130,11 +130,11 @@ def generate_launch_description():
     # Load MoveIt configuration (adjust the package name to match your robot's MoveIt config)
     moveit_config = MoveItConfigsBuilder("wilson", package_name="wilson_moveit_config").to_moveit_configs()
 
-    # Pick Object Action Server Node
-    pick_action_server_node = Node(
-        package="pick_place_action",
-        executable="pick_object_action_server",
-        name="pick_object_action_server",
+    # Grab Drink Action Server Node
+    grab_drink_server_node = Node(
+        package="grab_drink_action",
+        executable="grab_drink_action_server",
+        name="grab_drink_action_server",
         output="screen",
         parameters=[
             moveit_config.robot_description,
@@ -144,6 +144,23 @@ def generate_launch_description():
             moveit_config.joint_limits,
         ],
     )
+
+    # Locate Drink Action Server Node
+    locate_drink_params_file = os.path.join(
+        get_package_share_directory('locate_drink_action'),
+        'config',
+        'locate_drink_params.yaml'
+    )
+
+    locate_drink_server_node = Node(
+        package="locate_drink_action",
+        executable="locate_drink_action_server",
+        name="locate_drink_action_server",
+        output="screen",
+        parameters=[locate_drink_params_file],
+    )
+
+    
 
     # Timed launches to ensure proper startup sequence
     nav2_timer = TimerAction(
@@ -160,7 +177,13 @@ def generate_launch_description():
         period=8.0,
         actions=[move_group_launch]
     )
-    
+
+    # Action servers timer - start after move_group
+    action_servers_timer = TimerAction(
+        period=10.0,
+        actions=[grab_drink_server_node, locate_drink_server_node]
+    )
+
     # Optional external processes
     gemini = ExecuteProcess(
         cmd=['tilix', '-e', 'ros2', 'run', 'gemini', 'gemini_node', '--mode', 'sim', '--video', 'camera'],
@@ -228,12 +251,12 @@ def generate_launch_description():
         
         # Core simulation
         sim_launch,
-        
+
         # Timed component launches
         nav2_timer,
         localization_timer,
         move_group_timer,
-        pick_action_server_node,
+        action_servers_timer,
         initial_pose_timer,
         
         # Optional components
