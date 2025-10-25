@@ -394,18 +394,18 @@ class LocateDrinkActionServer(Node):
             image_io.seek(0)
             image_bytes = image_io.read()
 
-            # Prepare prompt for Gemini
+            # Prepare prompt for Gemini do not un-tab
             prompt = f"""Find the {drink_name} in this image.
-Return a JSON object with a bounding box in this exact format:
-[{{"box_2d": [ymin, xmin, ymax, xmax]}}]
+                Return a JSON object with a bounding box in this exact format:
+                [{{"box_2d": [ymin, xmin, ymax, xmax]}}]
 
-The coordinates should be normalized to 0-1000.
-If you cannot find the {drink_name}, return an empty array: []"""
+                The coordinates should be normalized to 0-1000.
+                If you cannot find the {drink_name}, return an empty array: []"""
 
             # Call Gemini API
             self.get_logger().info(f'Calling Gemini API to detect {drink_name}')
             response = self.gemini_client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-2.5-flash-lite',
                 contents=[
                     types.Part.from_bytes(
                         data=image_bytes,
