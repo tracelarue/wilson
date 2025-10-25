@@ -463,7 +463,7 @@ If you cannot find the {drink_name}, return an empty array: []"""
             json_output = self._extract_json(response_text)
 
             if not json_output:
-                self.get_logger().warn(f'No JSON found in Gemini response')
+                self.get_logger().warn('No JSON found in Gemini response')
                 return None
 
             bounding_boxes = json.loads(json_output)
@@ -500,20 +500,53 @@ If you cannot find the {drink_name}, return an empty array: []"""
             self.get_logger().info(f'Original bbox: ({norm_x1}, {norm_y1}) -> ({norm_x2}, {norm_y2})')
             self.get_logger().info(f'Scale factors: x={scale_x:.3f}, y={scale_y:.3f}')
 
-            # Calculate center of bounding box
+            # Calculate RGB bounding box dimensions
+            bbox_width = norm_x2 - norm_x1
+            bbox_height = norm_y2 - norm_y1
+
+            self.get_logger().info(f'RGB bbox dimensions: width={bbox_width}px, height={bbox_height}px')
+
+            # Calculate horizontal shift for depth image (0.3 * height)
+            # Positive shift = move to the right
+            horizontal_shift = int(0.35 * bbox_height)
+
+            self.get_logger().info(f'Calculated horizontal shift for depth: {horizontal_shift}px')
+
+            # Calculate center of RGB bounding box
             center_y = (norm_y1 + norm_y2) // 2
             center_x = (norm_x1 + norm_x2) // 2
 
-            self.get_logger().info(f'Bounding box center: ({center_x}, {center_y})')
+            self.get_logger().info(f'RGB bbox center: ({center_x}, {center_y})')
 
-            # Get depth at center
+            # Apply shift to get depth sampling position
+            depth_center_x = center_x + horizontal_shift
+            depth_center_y = center_y  # Y stays the same
+
+            # Calculate shifted bounding box for depth image
+            depth_x1 = norm_x1 + horizontal_shift
+            depth_x2 = norm_x2 + horizontal_shift
+            depth_y1 = norm_y1
+            depth_y2 = norm_y2
+
+            self.get_logger().info(f'Depth sampling center (shifted): ({depth_center_x}, {depth_center_y})')
+            self.get_logger().info(f'Depth bbox (shifted): ({depth_x1}, {depth_y1}) -> ({depth_x2}, {depth_y2})')
+
+            # Get depth at shifted center
             cv_depth_image = self.bridge.imgmsg_to_cv2(depth_image, desired_encoding='passthrough')
-            depth = float(cv_depth_image[center_y, center_x])
 
-            self.get_logger().info(f'Depth at center: {depth:.3f}m')
+            # Ensure shifted position is within image bounds
+            img_height, img_width = cv_depth_image.shape
+            if depth_center_x < 0 or depth_center_x >= img_width or depth_center_y < 0 or depth_center_y >= img_height:
+                self.get_logger().error(f'Shifted depth center ({depth_center_x}, {depth_center_y}) is out of bounds! Image size: {img_width}x{img_height}')
+                return None
 
-            # Calculate 3D position
-            x_3d, z_3d = self._calculate_3d_position(center_x, center_y, depth)
+            depth = float(cv_depth_image[depth_center_y, depth_center_x])
+
+            self.get_logger().info(f'Depth at shifted center: {depth:.3f}m')
+
+            # Calculate 3D position using the SHIFTED depth center position
+            # This ensures the 3D calculation uses the correct pixel coordinates
+            x_3d, z_3d = self._calculate_3d_position(depth_center_x, depth_center_y, depth)
 
             # === VISUALIZATION DEBUG ===
             # Display 3 debug images in separate windows
@@ -527,21 +560,35 @@ If you cannot find the {drink_name}, return an empty array: []"""
             cv2.rectangle(rgb_with_bbox, (norm_x1, norm_y1), (norm_x2, norm_y2), (0, 255, 0), 3)
             cv2.circle(rgb_with_bbox, (center_x, center_y), 8, (255, 0, 0), -1)
             # Add text with position info
-            text = f"Center: ({center_x}, {center_y}) Depth: {depth:.3f}m"
+            text = f"RGB Center: ({center_x}, {center_y})"
             cv2.putText(rgb_with_bbox, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            text2 = f"3D: x={x_3d:.3f}m, z={z_3d:.3f}m"
+            text2 = f"Shift: {horizontal_shift}px (0.5 * height={bbox_height})"
             cv2.putText(rgb_with_bbox, text2, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             text3 = f"BBox: ({norm_x1},{norm_y1}) -> ({norm_x2},{norm_y2})"
             cv2.putText(rgb_with_bbox, text3, (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
-            # Window 3: Depth image with bounding box
+            # Window 3: Depth image with BOTH bounding boxes
             # Normalize depth image for visualization
             depth_normalized = cv2.normalize(cv_depth_image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
             depth_colored = cv2.applyColorMap(depth_normalized, cv2.COLORMAP_JET)
-            cv2.rectangle(depth_colored, (norm_x1, norm_y1), (norm_x2, norm_y2), (0, 255, 0), 3)
-            cv2.circle(depth_colored, (center_x, center_y), 8, (255, 255, 255), -1)
-            cv2.putText(depth_colored, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            cv2.putText(depth_colored, text3, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+            # Draw original RGB bbox position in RED (for reference)
+            cv2.rectangle(depth_colored, (norm_x1, norm_y1), (norm_x2, norm_y2), (0, 0, 255), 2)
+            cv2.circle(depth_colored, (center_x, center_y), 6, (0, 0, 255), -1)
+
+            # Draw shifted depth bbox in GREEN (actual sampling position)
+            cv2.rectangle(depth_colored, (depth_x1, depth_y1), (depth_x2, depth_y2), (0, 255, 0), 3)
+            cv2.circle(depth_colored, (depth_center_x, depth_center_y), 8, (255, 255, 255), -1)
+
+            # Add text
+            text_depth = f"Depth Center: ({depth_center_x}, {depth_center_y}) = {depth:.3f}m"
+            cv2.putText(depth_colored, text_depth, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            text_shift = f"Shift: {horizontal_shift}px right"
+            cv2.putText(depth_colored, text_shift, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            text_3d = f"3D: x={x_3d:.3f}m, z={z_3d:.3f}m"
+            cv2.putText(depth_colored, text_3d, (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            text_legend = "RED=RGB position, GREEN=Shifted depth sampling"
+            cv2.putText(depth_colored, text_legend, (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
 
             # Create named windows and display
             cv2.namedWindow('1. Gemini Input', cv2.WINDOW_NORMAL)
