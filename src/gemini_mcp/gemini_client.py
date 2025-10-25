@@ -41,7 +41,7 @@ DEFAULT_RESPONSE_MODALITY = "AUDIO"  # Options: "TEXT", "AUDIO"
 # System instructions to guide Gemini's behavior and tool usage.
 system_instructions = """
     You have access to the tools provided by ros_mcp_server.
-    Start by connecting to the robot on ip 192.168.1.30, port 9090.
+    Start by connecting to the robot on ip 192.168.52.129, port 9090.
     When successfuly connected, reply just "Succesfully connected".
     You can go to known locations.
     Known locations are:

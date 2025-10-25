@@ -80,6 +80,13 @@ class LocateDrinkActionServer(Node):
             depth=1
         )
 
+        # QoS profile for visualization markers (compatible with RViz)
+        marker_qos = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            depth=10
+        )
+
         # Subscribe to camera topics
         self.rgb_subscription = self.create_subscription(
             Image,
@@ -108,7 +115,7 @@ class LocateDrinkActionServer(Node):
         self.marker_publisher = self.create_publisher(
             Marker,
             '/drink_marker',
-            10
+            marker_qos
         )
 
         # Action server

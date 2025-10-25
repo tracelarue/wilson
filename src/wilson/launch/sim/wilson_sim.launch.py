@@ -200,15 +200,33 @@ def generate_launch_description():
             os.path.join(get_package_share_directory('rosbridge_server'), 'launch', 'rosbridge_websocket_launch.xml')
         )
     )
-    
+
+    # rosapi node - provides service introspection for MCP server
+    rosapi_node = Node(
+        package='rosapi',
+        executable='rosapi_node',
+        name='rosapi',
+        parameters=[{
+            'topics_glob': '[*]',
+            'services_glob': '[*]',
+            'params_glob': '[*]'
+        }],
+        output='screen'
+    )
+
     # Timed optional processes
     rosbridge_timer = TimerAction(
         period=1.0,
         actions=[rosbridge_server]
     )
 
+    rosapi_timer = TimerAction(
+        period=1.5,
+        actions=[rosapi_node]
+    )
+
     gemini_ros_mcp = ExecuteProcess(
-        cmd=['tilix', '-e', 'python3', 'gemini_client.py', ],
+        cmd=['tilix', '-e', 'bash', '-c', 'python3 gemini_client.py --responses=TEXT; echo "\n\nScript exited. Press Enter to close..."; read'],
         cwd=gemini_mcp_path,
         output='screen',
     )
@@ -247,20 +265,21 @@ def generate_launch_description():
         declare_initial_pose_x,
         declare_initial_pose_y,
         declare_initial_pose_yaw,
-        
+
         # Core simulation
         sim_launch,
 
         # Timed component launches
-        nav2_timer,
-        localization_timer,
+        #nav2_timer,
+        #localization_timer,
         move_group_timer,
         action_servers_timer,
-        initial_pose_timer,
-        
+        #initial_pose_timer,
+
         # Optional components
         #gemini,
         teleop,
-        #rosbridge_timer,
-        #gemini_ros_mcp_timer
+        rosbridge_timer,
+        rosapi_timer,
+        gemini_ros_mcp_timer
     ])
