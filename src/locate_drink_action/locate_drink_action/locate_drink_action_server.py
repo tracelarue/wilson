@@ -30,6 +30,8 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from locate_drink_action.action import LocateDrink
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Twist, Point
+from visualization_msgs.msg import Marker
+from std_msgs.msg import ColorRGBA
 from cv_bridge import CvBridge
 
 
@@ -81,7 +83,7 @@ class LocateDrinkActionServer(Node):
         # Subscribe to camera topics
         self.rgb_subscription = self.create_subscription(
             Image,
-            '/camera/image_raw',
+            '/rgb_camera/image_raw',
             self.rgb_image_callback,
             image_qos,
             callback_group=self.callback_group
@@ -89,7 +91,7 @@ class LocateDrinkActionServer(Node):
 
         self.depth_subscription = self.create_subscription(
             Image,
-            '/camera/depth/image_raw',
+            '/depth_camera/depth/image_raw',
             self.depth_image_callback,
             image_qos,
             callback_group=self.callback_group
@@ -99,6 +101,13 @@ class LocateDrinkActionServer(Node):
         self.cmd_vel_publisher = self.create_publisher(
             Twist,
             '/cmd_vel',
+            10
+        )
+
+        # Publisher for visualization markers
+        self.marker_publisher = self.create_publisher(
+            Marker,
+            '/drink_marker',
             10
         )
 
@@ -196,14 +205,11 @@ class LocateDrinkActionServer(Node):
         """
         Execute the locate drink action.
 
-        Main control loop:
-        1. Detect drink using Gemini AI
-        2. Calculate 3D position
-        3. Calculate positioning error
-        4. Send velocity commands if error exceeds tolerance
-        5. Repeat until positioned or timeout
+        DEBUG MODE: Single detection attempt with visualization only.
+        Repositioning logic is commented out.
         """
         self.get_logger().info(f'Executing goal: Locate {goal_handle.request.drink_name}')
+        self.get_logger().info('=== DEBUG MODE: Visualization only, no repositioning ===')
 
         # Initialize result
         result = LocateDrink.Result()
@@ -215,104 +221,155 @@ class LocateDrinkActionServer(Node):
         feedback = LocateDrink.Feedback()
         feedback.detection_attempts = 0
 
-        # Start timing
-        start_time = time.time()
-
         # Wait for camera data
         if not self._wait_for_camera_data(timeout=5.0):
             result.message = 'Camera data not available'
             self.get_logger().error(result.message)
+            goal_handle.abort()
             return result
 
-        # Main control loop
-        loop_rate = self.create_rate(self.control_loop_rate)
-
+        # Single detection attempt with visualization
         try:
-            while rclpy.ok():
-                # Check timeout
-                elapsed_time = time.time() - start_time
-                if elapsed_time > self.overall_timeout:
-                    result.message = f'Timeout after {elapsed_time:.1f} seconds'
-                    self.get_logger().warn(result.message)
-                    self._stop_robot()
-                    break
+            feedback.detection_attempts = 1
+            feedback.current_status = f'Detecting {goal_handle.request.drink_name}...'
+            goal_handle.publish_feedback(feedback)
 
-                # Check if goal was cancelled
-                if goal_handle.is_cancel_requested:
-                    goal_handle.canceled()
-                    result.message = 'Goal cancelled by client'
-                    self.get_logger().info(result.message)
-                    self._stop_robot()
-                    return result
+            detection_result = self._detect_and_localize_drink(goal_handle.request.drink_name)
 
-                # Attempt to detect and localize the drink
-                feedback.detection_attempts += 1
-                feedback.current_status = f'Detecting {goal_handle.request.drink_name}... (attempt {feedback.detection_attempts})'
+            if detection_result is None:
+                result.message = f'Failed to detect {goal_handle.request.drink_name}'
+                self.get_logger().error(result.message)
+                goal_handle.abort()
+                return result
 
-                detection_result = self._detect_and_localize_drink(goal_handle.request.drink_name)
+            # Successfully detected drink
+            current_x, current_z = detection_result
 
-                if detection_result is None:
-                    # Detection failed
-                    if feedback.detection_attempts >= self.max_detection_attempts:
-                        result.message = f'Failed to detect {goal_handle.request.drink_name} after {feedback.detection_attempts} attempts'
-                        self.get_logger().error(result.message)
-                        self._stop_robot()
-                        break
+            # Calculate y position (assuming center vertically)
+            # In camera frame: x=left/right, y=up/down, z=forward/back
+            current_y = 0.0
 
-                    # Retry detection
-                    feedback.current_status = f'Drink not detected, retrying...'
-                    goal_handle.publish_feedback(feedback)
-                    loop_rate.sleep()
-                    continue
+            # Update feedback
+            feedback.current_position = Point(x=current_x, y=current_y, z=current_z)
+            feedback.error_x = current_x - self.target_x
+            feedback.error_z = current_z - self.target_z
+            feedback.current_status = f'Drink located at x={current_x:.3f}m, y={current_y:.3f}m, z={current_z:.3f}m'
+            goal_handle.publish_feedback(feedback)
 
-                # Successfully detected drink
-                current_x, current_z = detection_result
+            self.get_logger().info(
+                f'Detected position: x={current_x:.3f}m, y={current_y:.3f}m, z={current_z:.3f}m'
+            )
 
-                # Calculate errors
-                error_x = current_x - self.target_x
-                error_z = current_z - self.target_z
+            # Publish RViz marker
+            self._publish_marker(current_x, current_y, current_z, goal_handle.request.drink_name)
 
-                # Update feedback
-                feedback.current_position = Point(x=current_x, y=0.0, z=current_z)
-                feedback.error_x = error_x
-                feedback.error_z = error_z
-                feedback.current_status = f'Drink located at x={current_x:.3f}m, z={current_z:.3f}m'
-                goal_handle.publish_feedback(feedback)
+            # Set result
+            result.success = True
+            result.message = f'Successfully detected {goal_handle.request.drink_name} (visualization mode)'
+            result.final_position = Point(x=current_x, y=current_y, z=current_z)
 
-                self.get_logger().info(
-                    f'Position: x={current_x:.3f}m, z={current_z:.3f}m | '
-                    f'Errors: x={error_x:.3f}m, z={error_z:.3f}m'
-                )
-
-                # Check if within tolerance
-                if abs(error_x) < self.position_tolerance and abs(error_z) < self.position_tolerance:
-                    result.success = True
-                    result.message = f'Successfully positioned relative to {goal_handle.request.drink_name}'
-                    result.final_position = Point(x=current_x, y=0.0, z=current_z)
-                    self.get_logger().info(result.message)
-                    self._stop_robot()
-                    break
-
-                # Calculate and send velocity commands
-                self._send_velocity_commands(error_x, error_z)
-
-                # Wait for movement to settle
-                time.sleep(self.movement_settle_time)
-                loop_rate.sleep()
+            goal_handle.succeed()
 
         except Exception as e:
             result.message = f'Exception during execution: {str(e)}'
             self.get_logger().error(result.message)
-            self._stop_robot()
+            import traceback
+            self.get_logger().error(traceback.format_exc())
+            goal_handle.abort()
             return result
 
-        # Set goal status
-        if result.success:
-            goal_handle.succeed()
-        else:
-            goal_handle.abort()
-
         return result
+
+        # ===== COMMENTED OUT: REPOSITIONING LOGIC =====
+        # # Main control loop
+        # loop_rate = self.create_rate(self.control_loop_rate)
+        #
+        # try:
+        #     while rclpy.ok():
+        #         # Check timeout
+        #         elapsed_time = time.time() - start_time
+        #         if elapsed_time > self.overall_timeout:
+        #             result.message = f'Timeout after {elapsed_time:.1f} seconds'
+        #             self.get_logger().warn(result.message)
+        #             self._stop_robot()
+        #             break
+        #
+        #         # Check if goal was cancelled
+        #         if goal_handle.is_cancel_requested:
+        #             goal_handle.canceled()
+        #             result.message = 'Goal cancelled by client'
+        #             self.get_logger().info(result.message)
+        #             self._stop_robot()
+        #             return result
+        #
+        #         # Attempt to detect and localize the drink
+        #         feedback.detection_attempts += 1
+        #         feedback.current_status = f'Detecting {goal_handle.request.drink_name}... (attempt {feedback.detection_attempts})'
+        #
+        #         detection_result = self._detect_and_localize_drink(goal_handle.request.drink_name)
+        #
+        #         if detection_result is None:
+        #             # Detection failed
+        #             if feedback.detection_attempts >= self.max_detection_attempts:
+        #                 result.message = f'Failed to detect {goal_handle.request.drink_name} after {feedback.detection_attempts} attempts'
+        #                 self.get_logger().error(result.message)
+        #                 self._stop_robot()
+        #                 break
+        #
+        #             # Retry detection
+        #             feedback.current_status = f'Drink not detected, retrying...'
+        #             goal_handle.publish_feedback(feedback)
+        #             loop_rate.sleep()
+        #             continue
+        #
+        #         # Successfully detected drink
+        #         current_x, current_z = detection_result
+        #
+        #         # Calculate errors
+        #         error_x = current_x - self.target_x
+        #         error_z = current_z - self.target_z
+        #
+        #         # Update feedback
+        #         feedback.current_position = Point(x=current_x, y=0.0, z=current_z)
+        #         feedback.error_x = error_x
+        #         feedback.error_z = error_z
+        #         feedback.current_status = f'Drink located at x={current_x:.3f}m, z={current_z:.3f}m'
+        #         goal_handle.publish_feedback(feedback)
+        #
+        #         self.get_logger().info(
+        #             f'Position: x={current_x:.3f}m, z={current_z:.3f}m | '
+        #             f'Errors: x={error_x:.3f}m, z={error_z:.3f}m'
+        #         )
+        #
+        #         # Check if within tolerance
+        #         if abs(error_x) < self.position_tolerance and abs(error_z) < self.position_tolerance:
+        #             result.success = True
+        #             result.message = f'Successfully positioned relative to {goal_handle.request.drink_name}'
+        #             result.final_position = Point(x=current_x, y=0.0, z=current_z)
+        #             self.get_logger().info(result.message)
+        #             self._stop_robot()
+        #             break
+        #
+        #         # Calculate and send velocity commands
+        #         self._send_velocity_commands(error_x, error_z)
+        #
+        #         # Wait for movement to settle
+        #         time.sleep(self.movement_settle_time)
+        #         loop_rate.sleep()
+        #
+        # except Exception as e:
+        #     result.message = f'Exception during execution: {str(e)}'
+        #     self.get_logger().error(result.message)
+        #     self._stop_robot()
+        #     return result
+        #
+        # # Set goal status
+        # if result.success:
+        #     goal_handle.succeed()
+        # else:
+        #     goal_handle.abort()
+        #
+        # return result
 
     def _wait_for_camera_data(self, timeout=5.0):
         """
@@ -360,7 +417,18 @@ class LocateDrinkActionServer(Node):
             cv_rgb_image = self.bridge.imgmsg_to_cv2(rgb_image, "bgr8")
             frame_rgb = cv2.cvtColor(cv_rgb_image, cv2.COLOR_BGR2RGB)
             img = PIL.Image.fromarray(frame_rgb)
+
+            # Store original dimensions
+            original_width = cv_rgb_image.shape[1]
+            original_height = cv_rgb_image.shape[0]
+
+            # Thumbnail and store new dimensions
             img.thumbnail([1024, 1024])
+            thumbnail_width, thumbnail_height = img.size
+
+            self.get_logger().info(f'Original image: {original_width}x{original_height}')
+            self.get_logger().info(f'Thumbnail image: {thumbnail_width}x{thumbnail_height}')
+
             image_io = io.BytesIO()
             img.save(image_io, format="jpeg")
             image_io.seek(0)
@@ -412,17 +480,31 @@ If you cannot find the {drink_name}, return an empty array: []"""
                 self.get_logger().error(f'Invalid bounding box format: {box_2d}')
                 return None
 
-            # Convert normalized coordinates to pixel coordinates
-            norm_y1 = int(box_2d[0] / 1000 * self.image_height)
-            norm_x1 = int(box_2d[1] / 1000 * self.image_width)
-            norm_y2 = int(box_2d[2] / 1000 * self.image_height)
-            norm_x2 = int(box_2d[3] / 1000 * self.image_width)
+            # Convert normalized coordinates (0-1000) to pixel coordinates in THUMBNAIL space
+            thumb_y1 = box_2d[0] / 1000 * thumbnail_height
+            thumb_x1 = box_2d[1] / 1000 * thumbnail_width
+            thumb_y2 = box_2d[2] / 1000 * thumbnail_height
+            thumb_x2 = box_2d[3] / 1000 * thumbnail_width
+
+            self.get_logger().info(f'Thumbnail bbox: ({thumb_x1:.1f}, {thumb_y1:.1f}) -> ({thumb_x2:.1f}, {thumb_y2:.1f})')
+
+            # Scale from thumbnail space to ORIGINAL image space
+            scale_x = original_width / thumbnail_width
+            scale_y = original_height / thumbnail_height
+
+            norm_y1 = int(thumb_y1 * scale_y)
+            norm_x1 = int(thumb_x1 * scale_x)
+            norm_y2 = int(thumb_y2 * scale_y)
+            norm_x2 = int(thumb_x2 * scale_x)
+
+            self.get_logger().info(f'Original bbox: ({norm_x1}, {norm_y1}) -> ({norm_x2}, {norm_y2})')
+            self.get_logger().info(f'Scale factors: x={scale_x:.3f}, y={scale_y:.3f}')
 
             # Calculate center of bounding box
             center_y = (norm_y1 + norm_y2) // 2
             center_x = (norm_x1 + norm_x2) // 2
 
-            self.get_logger().info(f'Bounding box center: ({center_y}, {center_x})')
+            self.get_logger().info(f'Bounding box center: ({center_x}, {center_y})')
 
             # Get depth at center
             cv_depth_image = self.bridge.imgmsg_to_cv2(depth_image, desired_encoding='passthrough')
@@ -432,6 +514,50 @@ If you cannot find the {drink_name}, return an empty array: []"""
 
             # Calculate 3D position
             x_3d, z_3d = self._calculate_3d_position(center_x, center_y, depth)
+
+            # === VISUALIZATION DEBUG ===
+            # Display 3 debug images in separate windows
+
+            # Window 1: Gemini input image (thumbnailed)
+            gemini_display_img = np.array(img)
+            gemini_bgr = cv2.cvtColor(gemini_display_img, cv2.COLOR_RGB2BGR)
+
+            # Window 2: Original RGB image with bounding box
+            rgb_with_bbox = cv_rgb_image.copy()
+            cv2.rectangle(rgb_with_bbox, (norm_x1, norm_y1), (norm_x2, norm_y2), (0, 255, 0), 3)
+            cv2.circle(rgb_with_bbox, (center_x, center_y), 8, (255, 0, 0), -1)
+            # Add text with position info
+            text = f"Center: ({center_x}, {center_y}) Depth: {depth:.3f}m"
+            cv2.putText(rgb_with_bbox, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            text2 = f"3D: x={x_3d:.3f}m, z={z_3d:.3f}m"
+            cv2.putText(rgb_with_bbox, text2, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            text3 = f"BBox: ({norm_x1},{norm_y1}) -> ({norm_x2},{norm_y2})"
+            cv2.putText(rgb_with_bbox, text3, (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+            # Window 3: Depth image with bounding box
+            # Normalize depth image for visualization
+            depth_normalized = cv2.normalize(cv_depth_image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+            depth_colored = cv2.applyColorMap(depth_normalized, cv2.COLORMAP_JET)
+            cv2.rectangle(depth_colored, (norm_x1, norm_y1), (norm_x2, norm_y2), (0, 255, 0), 3)
+            cv2.circle(depth_colored, (center_x, center_y), 8, (255, 255, 255), -1)
+            cv2.putText(depth_colored, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            cv2.putText(depth_colored, text3, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+            # Create named windows and display
+            cv2.namedWindow('1. Gemini Input', cv2.WINDOW_NORMAL)
+            cv2.namedWindow('2. RGB with BBox', cv2.WINDOW_NORMAL)
+            cv2.namedWindow('3. Depth with BBox', cv2.WINDOW_NORMAL)
+
+            cv2.imshow('1. Gemini Input', gemini_bgr)
+            cv2.imshow('2. RGB with BBox', rgb_with_bbox)
+            cv2.imshow('3. Depth with BBox', depth_colored)
+
+            self.get_logger().info('=== DEBUG WINDOWS DISPLAYED ===')
+            self.get_logger().info('Press any key on one of the windows to continue...')
+            cv2.waitKey(0)  # Wait indefinitely for key press
+            cv2.destroyAllWindows()
+            cv2.waitKey(1)  # Small delay to ensure windows close properly
+            # === END VISUALIZATION ===
 
             return (x_3d, z_3d)
 
@@ -553,6 +679,44 @@ If you cannot find the {drink_name}, return an empty array: []"""
         cmd_vel.angular.z = 0.0
         self.cmd_vel_publisher.publish(cmd_vel)
         self.get_logger().info('Robot stopped')
+
+    def _publish_marker(self, x, y, z, drink_name):
+        """
+        Publish a visualization marker for the detected drink.
+
+        Args:
+            x: X position in camera frame (meters)
+            y: Y position in camera frame (meters)
+            z: Z position in camera frame (meters)
+            drink_name: Name of the drink for the marker text
+        """
+        marker = Marker()
+        marker.header.frame_id = self.camera_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "drink_detection"
+        marker.id = 0
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+
+        # Set position
+        marker.pose.position.x = x
+        marker.pose.position.y = y
+        marker.pose.position.z = z
+        marker.pose.orientation.w = 1.0
+
+        # Set scale (10cm sphere)
+        marker.scale.x = 0.1
+        marker.scale.y = 0.1
+        marker.scale.z = 0.1
+
+        # Set color (bright green)
+        marker.color = ColorRGBA(r=0.0, g=1.0, b=0.0, a=1.0)
+
+        # Set lifetime
+        marker.lifetime.sec = 30  # 30 seconds
+
+        self.marker_publisher.publish(marker)
+        self.get_logger().info(f'Published marker for {drink_name} at x={x:.3f}, y={y:.3f}, z={z:.3f}')
 
 
 def main(args=None):

@@ -202,8 +202,8 @@ The robot moves via differential drive (`/cmd_vel`) to minimize the error betwee
 ## Topics
 
 ### Subscribed Topics
-- `/camera/image_raw` (sensor_msgs/Image): RGB camera feed
-- `/camera/depth/image_raw` (sensor_msgs/Image): Depth camera feed
+- `/rgb_camera/image_raw` (sensor_msgs/Image): RGB camera feed
+- `/depth_camera/depth/image_raw` (sensor_msgs/Image): Depth camera feed
 
 ### Published Topics
 - `/cmd_vel` (geometry_msgs/Twist): Velocity commands for differential drive base

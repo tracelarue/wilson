@@ -188,12 +188,6 @@ def generate_launch_description():
         actions=[grab_drink_server_node, locate_drink_server_node]
     )
 
-    # Optional external processes
-    gemini = ExecuteProcess(
-        cmd=['tilix', '-e', 'ros2', 'run', 'gemini', 'gemini_node', '--responses', 'TEXT'],
-        output='screen',
-    )
-
     # Teleop keyboard in separate terminal
     teleop = ExecuteProcess(
         cmd=['tilix', '-e', 'ros2', 'run', 'teleop_twist_keyboard', 'teleop_twist_keyboard', '--ros-args', '--remap', 'cmd_vel:=/diff_drive_controller/cmd_vel_unstamped'],
@@ -214,7 +208,7 @@ def generate_launch_description():
     )
 
     gemini_ros_mcp = ExecuteProcess(
-        cmd=['tilix', '-e', 'python3', 'gemini_client.py'],
+        cmd=['tilix', '-e', 'python3', 'gemini_client.py', ],
         cwd=gemini_mcp_path,
         output='screen',
     )
@@ -266,7 +260,7 @@ def generate_launch_description():
         
         # Optional components
         #gemini,
-        #teleop,
-        rosbridge_timer,
-        gemini_ros_mcp_timer
+        teleop,
+        #rosbridge_timer,
+        #gemini_ros_mcp_timer
     ])

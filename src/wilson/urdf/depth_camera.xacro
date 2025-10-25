@@ -2,7 +2,7 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" >
 
     <joint name="depth_camera_optical_joint" type="fixed">
-        <parent link="depth_camera_link"/>
+        <parent link="depth_camera_sensor_link"/>
         <child link="depth_camera_link_optical"/>
         <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
     </joint>
@@ -10,13 +10,13 @@
     <link name="depth_camera_link_optical"></link>
 
 
-    <gazebo reference="depth_camera_link">
+    <gazebo reference="depth_camera_sensor_link">
         <material>Gazebo/Black</material>
 
-        <sensor name="camera" type="depth">
+        <sensor name="depth_camera" type="depth">
             <pose> 0 0 0 0 0 0 </pose>
             <visualize>true</visualize>
-            <update_rate>5</update_rate>
+            <update_rate>20</update_rate>
             <camera>
                 <horizontal_fov>1.089</horizontal_fov>
                 <image>
@@ -25,14 +25,14 @@
                     <height>480</height>
                 </image>
                 <clip>
-                    <near>0.05</near>
-                    <far>8.0</far>
+                    <near>0.5</near>
+                    <far>4.0</far>
                 </clip>
             </camera>
             <plugin name="depth_camera_controller" filename="libgazebo_ros_camera.so">
                 <frame_name>depth_camera_link_optical</frame_name>
-                <mindepth>0.1</mindepth>
-                <maxdepth>100.0</maxdepth>
+                <mindepth>0.5</mindepth>
+                <maxdepth>4.0</maxdepth>
             </plugin>
         </sensor>
     </gazebo>

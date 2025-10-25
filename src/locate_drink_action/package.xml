@@ -16,6 +16,7 @@
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
+  <depend>visualization_msgs</depend>
 
   <!-- Vision dependencies -->
   <depend>cv_bridge</depend>

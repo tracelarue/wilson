@@ -259,13 +259,13 @@ class MultiModalGeminiNode(Node):
         )
         self.cam_subscription = self.create_subscription(
             Image,
-            '/camera/image_raw',
+            '/rgb_camera/image_raw',
             self.image_callback,
             image_qos
         )
         self.depth_cam_subscription = self.create_subscription(
             Image,
-            '/camera/depth/image_raw',
+            '/depth_camera/depth/image_raw',
             self.depth_image_callback,
             image_qos
         )
