@@ -128,11 +128,11 @@ class LocateDrinkActionServer(Node):
         """Declare all ROS parameters with default values."""
         # Target position parameters
         self.declare_parameter('target_x', 0.0)
-        self.declare_parameter('target_z', 0.4)
-        self.declare_parameter('position_tolerance', 0.03)
+        self.declare_parameter('target_z', 0.65)
+        self.declare_parameter('position_tolerance', 0.05)
 
         # Control parameters
-        self.declare_parameter('k_linear', 0.5)
+        self.declare_parameter('k_linear', 0.3)
         self.declare_parameter('k_angular', 1.0)
         self.declare_parameter('max_linear_vel', 0.3)
         self.declare_parameter('max_angular_vel', 0.5)
@@ -144,6 +144,7 @@ class LocateDrinkActionServer(Node):
         self.declare_parameter('camera_frame', 'depth_camera_link_optical')
         self.declare_parameter('image_width', 640)
         self.declare_parameter('image_height', 480)
+        self.declare_parameter('depth_sample_size', 5)  # NxN window for depth averaging
 
         # Operation parameters
         self.declare_parameter('max_detection_attempts', 5)
@@ -172,6 +173,7 @@ class LocateDrinkActionServer(Node):
         self.camera_frame = self.get_parameter('camera_frame').value
         self.image_width = self.get_parameter('image_width').value
         self.image_height = self.get_parameter('image_height').value
+        self.depth_sample_size = self.get_parameter('depth_sample_size').value
         self.v_fov = self.h_fov / self.aspect_ratio
 
         # Operation parameters
@@ -205,11 +207,9 @@ class LocateDrinkActionServer(Node):
         """
         Execute the locate drink action.
 
-        DEBUG MODE: Single detection attempt with visualization only.
-        Repositioning logic is commented out.
+        Uses closed-loop control to position the robot optimally relative to the detected drink.
         """
         self.get_logger().info(f'Executing goal: Locate {goal_handle.request.drink_name}')
-        self.get_logger().info('=== DEBUG MODE: Visualization only, no repositioning ===')
 
         # Initialize result
         result = LocateDrink.Result()
@@ -228,148 +228,108 @@ class LocateDrinkActionServer(Node):
             goal_handle.abort()
             return result
 
-        # Single detection attempt with visualization
+        # Start timing for overall timeout
+        start_time = time.time()
+
+        # Main control loop
+        loop_rate = self.create_rate(self.control_loop_rate)
+
         try:
-            feedback.detection_attempts = 1
-            feedback.current_status = f'Detecting {goal_handle.request.drink_name}...'
-            goal_handle.publish_feedback(feedback)
+            while rclpy.ok():
+                # Check timeout
+                elapsed_time = time.time() - start_time
+                if elapsed_time > self.overall_timeout:
+                    result.message = f'Timeout after {elapsed_time:.1f} seconds'
+                    self.get_logger().warn(result.message)
+                    self._stop_robot()
+                    break
 
-            detection_result = self._detect_and_localize_drink(goal_handle.request.drink_name)
+                # Check if goal was cancelled
+                if goal_handle.is_cancel_requested:
+                    goal_handle.canceled()
+                    result.message = 'Goal cancelled by client'
+                    self.get_logger().info(result.message)
+                    self._stop_robot()
+                    return result
 
-            if detection_result is None:
-                result.message = f'Failed to detect {goal_handle.request.drink_name}'
-                self.get_logger().error(result.message)
-                goal_handle.abort()
-                return result
+                # Attempt to detect and localize the drink
+                feedback.detection_attempts += 1
+                feedback.current_status = f'Detecting {goal_handle.request.drink_name}... (attempt {feedback.detection_attempts})'
 
-            # Successfully detected drink
-            current_x, current_z = detection_result
+                detection_result = self._detect_and_localize_drink(goal_handle.request.drink_name)
 
-            # Calculate y position (assuming center vertically)
-            # In camera frame: x=left/right, y=up/down, z=forward/back
-            current_y = 0.0
+                if detection_result is None:
+                    # Detection failed
+                    if feedback.detection_attempts >= self.max_detection_attempts:
+                        result.message = f'Failed to detect {goal_handle.request.drink_name} after {feedback.detection_attempts} attempts'
+                        self.get_logger().error(result.message)
+                        self._stop_robot()
+                        break
 
-            # Update feedback
-            feedback.current_position = Point(x=current_x, y=current_y, z=current_z)
-            feedback.error_x = current_x - self.target_x
-            feedback.error_z = current_z - self.target_z
-            feedback.current_status = f'Drink located at x={current_x:.3f}m, y={current_y:.3f}m, z={current_z:.3f}m'
-            goal_handle.publish_feedback(feedback)
+                    # Retry detection
+                    feedback.current_status = f'Drink not detected, retrying...'
+                    goal_handle.publish_feedback(feedback)
+                    loop_rate.sleep()
+                    continue
 
-            self.get_logger().info(
-                f'Detected position: x={current_x:.3f}m, y={current_y:.3f}m, z={current_z:.3f}m'
-            )
+                # Successfully detected drink
+                current_x, current_y, current_z = detection_result
 
-            # Publish RViz marker
-            self._publish_marker(current_x, current_y, current_z, goal_handle.request.drink_name)
+                # Add can diameter offset to z position (0.033m = 33mm can diameter)
+                # This accounts for the distance from the can center to its front edge
+                current_z_adjusted = current_z + 0.033
 
-            # Set result
-            result.success = True
-            result.message = f'Successfully detected {goal_handle.request.drink_name} (visualization mode)'
-            result.final_position = Point(x=current_x, y=current_y, z=current_z)
+                # Calculate errors using adjusted z position
+                error_x = current_x - self.target_x
+                error_z = current_z_adjusted - self.target_z
 
-            goal_handle.succeed()
+                # Update feedback with adjusted position
+                feedback.current_position = Point(x=current_x, y=current_y, z=current_z_adjusted)
+                feedback.error_x = error_x
+                feedback.error_z = error_z
+                feedback.current_status = f'Drink located at x={current_x:.3f}m, y={current_y:.3f}m, z={current_z_adjusted:.3f}m (adjusted)'
+                goal_handle.publish_feedback(feedback)
+
+                self.get_logger().info(
+                    f'Position: x={current_x:.3f}m, y={current_y:.3f}m, z={current_z:.3f}m (raw), z_adj={current_z_adjusted:.3f}m | '
+                    f'Errors: x={error_x:.3f}m, z={error_z:.3f}m'
+                )
+
+                # Publish RViz marker with adjusted z position
+                self._publish_marker(current_x, current_y, current_z_adjusted, goal_handle.request.drink_name)
+
+                # Check if within tolerance
+                if abs(error_x) < self.position_tolerance and abs(error_z) < self.position_tolerance:
+                    result.success = True
+                    result.message = f'Successfully positioned relative to {goal_handle.request.drink_name}'
+                    result.final_position = Point(x=current_x, y=current_y, z=current_z_adjusted)
+                    self.get_logger().info(result.message)
+                    self._stop_robot()
+                    break
+
+                # Calculate and send velocity commands
+                self._send_velocity_commands(error_x, error_z)
+
+                # Wait for movement to settle
+                time.sleep(self.movement_settle_time)
+                loop_rate.sleep()
 
         except Exception as e:
             result.message = f'Exception during execution: {str(e)}'
             self.get_logger().error(result.message)
             import traceback
             self.get_logger().error(traceback.format_exc())
+            self._stop_robot()
             goal_handle.abort()
             return result
 
-        return result
+        # Set goal status
+        if result.success:
+            goal_handle.succeed()
+        else:
+            goal_handle.abort()
 
-        # ===== COMMENTED OUT: REPOSITIONING LOGIC =====
-        # # Main control loop
-        # loop_rate = self.create_rate(self.control_loop_rate)
-        #
-        # try:
-        #     while rclpy.ok():
-        #         # Check timeout
-        #         elapsed_time = time.time() - start_time
-        #         if elapsed_time > self.overall_timeout:
-        #             result.message = f'Timeout after {elapsed_time:.1f} seconds'
-        #             self.get_logger().warn(result.message)
-        #             self._stop_robot()
-        #             break
-        #
-        #         # Check if goal was cancelled
-        #         if goal_handle.is_cancel_requested:
-        #             goal_handle.canceled()
-        #             result.message = 'Goal cancelled by client'
-        #             self.get_logger().info(result.message)
-        #             self._stop_robot()
-        #             return result
-        #
-        #         # Attempt to detect and localize the drink
-        #         feedback.detection_attempts += 1
-        #         feedback.current_status = f'Detecting {goal_handle.request.drink_name}... (attempt {feedback.detection_attempts})'
-        #
-        #         detection_result = self._detect_and_localize_drink(goal_handle.request.drink_name)
-        #
-        #         if detection_result is None:
-        #             # Detection failed
-        #             if feedback.detection_attempts >= self.max_detection_attempts:
-        #                 result.message = f'Failed to detect {goal_handle.request.drink_name} after {feedback.detection_attempts} attempts'
-        #                 self.get_logger().error(result.message)
-        #                 self._stop_robot()
-        #                 break
-        #
-        #             # Retry detection
-        #             feedback.current_status = f'Drink not detected, retrying...'
-        #             goal_handle.publish_feedback(feedback)
-        #             loop_rate.sleep()
-        #             continue
-        #
-        #         # Successfully detected drink
-        #         current_x, current_z = detection_result
-        #
-        #         # Calculate errors
-        #         error_x = current_x - self.target_x
-        #         error_z = current_z - self.target_z
-        #
-        #         # Update feedback
-        #         feedback.current_position = Point(x=current_x, y=0.0, z=current_z)
-        #         feedback.error_x = error_x
-        #         feedback.error_z = error_z
-        #         feedback.current_status = f'Drink located at x={current_x:.3f}m, z={current_z:.3f}m'
-        #         goal_handle.publish_feedback(feedback)
-        #
-        #         self.get_logger().info(
-        #             f'Position: x={current_x:.3f}m, z={current_z:.3f}m | '
-        #             f'Errors: x={error_x:.3f}m, z={error_z:.3f}m'
-        #         )
-        #
-        #         # Check if within tolerance
-        #         if abs(error_x) < self.position_tolerance and abs(error_z) < self.position_tolerance:
-        #             result.success = True
-        #             result.message = f'Successfully positioned relative to {goal_handle.request.drink_name}'
-        #             result.final_position = Point(x=current_x, y=0.0, z=current_z)
-        #             self.get_logger().info(result.message)
-        #             self._stop_robot()
-        #             break
-        #
-        #         # Calculate and send velocity commands
-        #         self._send_velocity_commands(error_x, error_z)
-        #
-        #         # Wait for movement to settle
-        #         time.sleep(self.movement_settle_time)
-        #         loop_rate.sleep()
-        #
-        # except Exception as e:
-        #     result.message = f'Exception during execution: {str(e)}'
-        #     self.get_logger().error(result.message)
-        #     self._stop_robot()
-        #     return result
-        #
-        # # Set goal status
-        # if result.success:
-        #     goal_handle.succeed()
-        # else:
-        #     goal_handle.abort()
-        #
-        # return result
+        return result
 
     def _wait_for_camera_data(self, timeout=5.0):
         """
@@ -402,7 +362,7 @@ class LocateDrinkActionServer(Node):
             drink_name: Name of the drink to detect
 
         Returns:
-            Tuple of (x, z) position in meters, or None if detection failed
+            Tuple of (x, y, z) position in meters, or None if detection failed
         """
         try:
             # Get current images
@@ -445,7 +405,7 @@ If you cannot find the {drink_name}, return an empty array: []"""
             # Call Gemini API
             self.get_logger().info(f'Calling Gemini API to detect {drink_name}')
             response = self.gemini_client.models.generate_content(
-                model='gemini-2.0-flash',
+                model='gemini-2.5-flash',
                 contents=[
                     types.Part.from_bytes(
                         data=image_bytes,
@@ -531,82 +491,103 @@ If you cannot find the {drink_name}, return an empty array: []"""
             self.get_logger().info(f'Depth sampling center (shifted): ({depth_center_x}, {depth_center_y})')
             self.get_logger().info(f'Depth bbox (shifted): ({depth_x1}, {depth_y1}) -> ({depth_x2}, {depth_y2})')
 
-            # Get depth at shifted center
+            # Get depth image
             cv_depth_image = self.bridge.imgmsg_to_cv2(depth_image, desired_encoding='passthrough')
-
-            # Ensure shifted position is within image bounds
             img_height, img_width = cv_depth_image.shape
-            if depth_center_x < 0 or depth_center_x >= img_width or depth_center_y < 0 or depth_center_y >= img_height:
-                self.get_logger().error(f'Shifted depth center ({depth_center_x}, {depth_center_y}) is out of bounds! Image size: {img_width}x{img_height}')
+
+            # Calculate depth as average of NxN window centered at depth_center
+            half_window = self.depth_sample_size // 2
+
+            # Calculate window bounds
+            y_min = max(0, depth_center_y - half_window)
+            y_max = min(img_height, depth_center_y + half_window + 1)
+            x_min = max(0, depth_center_x - half_window)
+            x_max = min(img_width, depth_center_x + half_window + 1)
+
+            # Ensure window is within image bounds
+            if y_min >= img_height or y_max <= 0 or x_min >= img_width or x_max <= 0:
+                self.get_logger().error(f'Depth sampling window out of bounds! Center: ({depth_center_x}, {depth_center_y}), Image: {img_width}x{img_height}')
                 return None
 
-            depth = float(cv_depth_image[depth_center_y, depth_center_x])
+            # Extract depth window and calculate average (filtering out zeros/invalid)
+            depth_window = cv_depth_image[y_min:y_max, x_min:x_max]
+            valid_depths = depth_window[depth_window > 0]
 
-            self.get_logger().info(f'Depth at shifted center: {depth:.3f}m')
+            if len(valid_depths) == 0:
+                self.get_logger().warn('No valid depth readings in sampling window')
+                return None
+
+            depth = float(np.mean(valid_depths))
+            depth_std = float(np.std(valid_depths))
+
+            self.get_logger().info(f'Depth sampling: center=({depth_center_x}, {depth_center_y}), window={self.depth_sample_size}x{self.depth_sample_size}, samples={len(valid_depths)}')
+            self.get_logger().info(f'Depth average: {depth:.3f}m (std: {depth_std:.3f}m)')
 
             # Calculate 3D position using the SHIFTED depth center position
             # This ensures the 3D calculation uses the correct pixel coordinates
-            x_3d, z_3d = self._calculate_3d_position(depth_center_x, depth_center_y, depth)
+            x_3d, y_3d, z_3d = self._calculate_3d_position(depth_center_x, depth_center_y, depth)
 
             # === VISUALIZATION DEBUG ===
-            # Display 3 debug images in separate windows
-
-            # Window 1: Gemini input image (thumbnailed)
-            gemini_display_img = np.array(img)
-            gemini_bgr = cv2.cvtColor(gemini_display_img, cv2.COLOR_RGB2BGR)
-
-            # Window 2: Original RGB image with bounding box
-            rgb_with_bbox = cv_rgb_image.copy()
-            cv2.rectangle(rgb_with_bbox, (norm_x1, norm_y1), (norm_x2, norm_y2), (0, 255, 0), 3)
-            cv2.circle(rgb_with_bbox, (center_x, center_y), 8, (255, 0, 0), -1)
-            # Add text with position info
-            text = f"RGB Center: ({center_x}, {center_y})"
-            cv2.putText(rgb_with_bbox, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            text2 = f"Shift: {horizontal_shift}px (0.5 * height={bbox_height})"
-            cv2.putText(rgb_with_bbox, text2, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            text3 = f"BBox: ({norm_x1},{norm_y1}) -> ({norm_x2},{norm_y2})"
-            cv2.putText(rgb_with_bbox, text3, (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-
-            # Window 3: Depth image with BOTH bounding boxes
-            # Normalize depth image for visualization
-            depth_normalized = cv2.normalize(cv_depth_image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-            depth_colored = cv2.applyColorMap(depth_normalized, cv2.COLORMAP_JET)
-
-            # Draw original RGB bbox position in RED (for reference)
-            cv2.rectangle(depth_colored, (norm_x1, norm_y1), (norm_x2, norm_y2), (0, 0, 255), 2)
-            cv2.circle(depth_colored, (center_x, center_y), 6, (0, 0, 255), -1)
-
-            # Draw shifted depth bbox in GREEN (actual sampling position)
-            cv2.rectangle(depth_colored, (depth_x1, depth_y1), (depth_x2, depth_y2), (0, 255, 0), 3)
-            cv2.circle(depth_colored, (depth_center_x, depth_center_y), 8, (255, 255, 255), -1)
-
-            # Add text
-            text_depth = f"Depth Center: ({depth_center_x}, {depth_center_y}) = {depth:.3f}m"
-            cv2.putText(depth_colored, text_depth, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            text_shift = f"Shift: {horizontal_shift}px right"
-            cv2.putText(depth_colored, text_shift, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            text_3d = f"3D: x={x_3d:.3f}m, z={z_3d:.3f}m"
-            cv2.putText(depth_colored, text_3d, (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            text_legend = "RED=RGB position, GREEN=Shifted depth sampling"
-            cv2.putText(depth_colored, text_legend, (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-
-            # Create named windows and display
-            cv2.namedWindow('1. Gemini Input', cv2.WINDOW_NORMAL)
-            cv2.namedWindow('2. RGB with BBox', cv2.WINDOW_NORMAL)
-            cv2.namedWindow('3. Depth with BBox', cv2.WINDOW_NORMAL)
-
-            cv2.imshow('1. Gemini Input', gemini_bgr)
-            cv2.imshow('2. RGB with BBox', rgb_with_bbox)
-            cv2.imshow('3. Depth with BBox', depth_colored)
-
-            self.get_logger().info('=== DEBUG WINDOWS DISPLAYED ===')
-            self.get_logger().info('Press any key on one of the windows to continue...')
-            cv2.waitKey(0)  # Wait indefinitely for key press
-            cv2.destroyAllWindows()
-            cv2.waitKey(1)  # Small delay to ensure windows close properly
+            # Uncomment the following section to enable debug visualization windows
+            #
+            # # Display 3 debug images in separate windows
+            #
+            # # Window 1: Gemini input image (thumbnailed)
+            # gemini_display_img = np.array(img)
+            # gemini_bgr = cv2.cvtColor(gemini_display_img, cv2.COLOR_RGB2BGR)
+            #
+            # # Window 2: Original RGB image with bounding box
+            # rgb_with_bbox = cv_rgb_image.copy()
+            # cv2.rectangle(rgb_with_bbox, (norm_x1, norm_y1), (norm_x2, norm_y2), (0, 255, 0), 3)
+            # cv2.circle(rgb_with_bbox, (center_x, center_y), 8, (255, 0, 0), -1)
+            # # Add text with position info
+            # text = f"RGB Center: ({center_x}, {center_y})"
+            # cv2.putText(rgb_with_bbox, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            # text2 = f"Shift: {horizontal_shift}px (0.5 * height={bbox_height})"
+            # cv2.putText(rgb_with_bbox, text2, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            # text3 = f"BBox: ({norm_x1},{norm_y1}) -> ({norm_x2},{norm_y2})"
+            # cv2.putText(rgb_with_bbox, text3, (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            #
+            # # Window 3: Depth image with BOTH bounding boxes
+            # # Normalize depth image for visualization
+            # depth_normalized = cv2.normalize(cv_depth_image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+            # depth_colored = cv2.applyColorMap(depth_normalized, cv2.COLORMAP_JET)
+            #
+            # # Draw original RGB bbox position in RED (for reference)
+            # cv2.rectangle(depth_colored, (norm_x1, norm_y1), (norm_x2, norm_y2), (0, 0, 255), 2)
+            # cv2.circle(depth_colored, (center_x, center_y), 6, (0, 0, 255), -1)
+            #
+            # # Draw shifted depth bbox in GREEN (actual sampling position)
+            # cv2.rectangle(depth_colored, (depth_x1, depth_y1), (depth_x2, depth_y2), (0, 255, 0), 3)
+            # cv2.circle(depth_colored, (depth_center_x, depth_center_y), 8, (255, 255, 255), -1)
+            #
+            # # Add text
+            # text_depth = f"Depth Center: ({depth_center_x}, {depth_center_y}) = {depth:.3f}m"
+            # cv2.putText(depth_colored, text_depth, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            # text_shift = f"Shift: {horizontal_shift}px right"
+            # cv2.putText(depth_colored, text_shift, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            # text_3d = f"3D: x={x_3d:.3f}m, z={z_3d:.3f}m"
+            # cv2.putText(depth_colored, text_3d, (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            # text_legend = "RED=RGB position, GREEN=Shifted depth sampling"
+            # cv2.putText(depth_colored, text_legend, (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+            #
+            # # Create named windows and display
+            # cv2.namedWindow('1. Gemini Input', cv2.WINDOW_NORMAL)
+            # cv2.namedWindow('2. RGB with BBox', cv2.WINDOW_NORMAL)
+            # cv2.namedWindow('3. Depth with BBox', cv2.WINDOW_NORMAL)
+            #
+            # cv2.imshow('1. Gemini Input', gemini_bgr)
+            # cv2.imshow('2. RGB with BBox', rgb_with_bbox)
+            # cv2.imshow('3. Depth with BBox', depth_colored)
+            #
+            # self.get_logger().info('=== DEBUG WINDOWS DISPLAYED ===')
+            # self.get_logger().info('Press any key on one of the windows to continue...')
+            # cv2.waitKey(0)  # Wait indefinitely for key press
+            # cv2.destroyAllWindows()
+            # cv2.waitKey(1)  # Small delay to ensure windows close properly
             # === END VISUALIZATION ===
 
-            return (x_3d, z_3d)
+            return (x_3d, y_3d, z_3d)
 
         except Exception as e:
             self.get_logger().error(f'Error in drink detection: {str(e)}')
@@ -659,10 +640,10 @@ If you cannot find the {drink_name}, return an empty array: []"""
         Args:
             pixel_x: X pixel coordinate
             pixel_y: Y pixel coordinate
-            depth: Depth in meters
+            depth: Depth in meters from camera optical frame
 
         Returns:
-            Tuple of (x, z) in meters relative to camera frame
+            Tuple of (x, y, z) in meters relative to camera optical frame
         """
         # Calculate angle per pixel
         angle_per_pixel_x = self.h_fov / self.image_width
@@ -683,7 +664,7 @@ If you cannot find the {drink_name}, return an empty array: []"""
 
         self.get_logger().debug(f'3D position: x={x:.3f}m, y={y:.3f}m, z={z:.3f}m')
 
-        return (x, z)
+        return (x, y, z)
 
     def _send_velocity_commands(self, error_x, error_z):
         """
@@ -737,6 +718,8 @@ If you cannot find the {drink_name}, return an empty array: []"""
             z: Z position in camera frame (meters)
             drink_name: Name of the drink for the marker text
         """
+        self.get_logger().info(f'_publish_marker called with x={x:.3f}, y={y:.3f}, z={z:.3f}, drink_name={drink_name}')
+
         marker = Marker()
         marker.header.frame_id = self.camera_frame
         marker.header.stamp = self.get_clock().now().to_msg()
@@ -762,8 +745,9 @@ If you cannot find the {drink_name}, return an empty array: []"""
         # Set lifetime
         marker.lifetime.sec = 30  # 30 seconds
 
+        self.get_logger().info(f'Publishing marker on topic /drink_marker with frame_id={self.camera_frame}')
         self.marker_publisher.publish(marker)
-        self.get_logger().info(f'Published marker for {drink_name} at x={x:.3f}, y={y:.3f}, z={z:.3f}')
+        self.get_logger().info(f'Marker published successfully for {drink_name} at x={x:.3f}, y={y:.3f}, z={z:.3f}')
 
 
 def main(args=None):

@@ -53,7 +53,7 @@ ros2 launch grab_drink_action grab_drink_server.launch.py
 ```bash
 # Basic example - grab drink at x=0, y=0.1, z=0.4 in depth_camera_link_optical frame
 ros2 action send_goal /grab_drink grab_drink_action/action/GrabDrink "{
-  target_position: {x: 0, y: 0.1, z: 0.4},
+  target_position: {x: 0, y: 0.09, z: 0.65},
   target_frame: 'depth_camera_link_optical'
 }" --feedback
 ```

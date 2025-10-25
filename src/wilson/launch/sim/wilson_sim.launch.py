@@ -153,7 +153,7 @@ def generate_launch_description():
     locate_drink_params_file = os.path.join(
         get_package_share_directory('locate_drink_action'),
         'config',
-        'locate_drink_params.yaml'
+        'locate_drink_params_sim.yaml'
     )
 
     locate_drink_server_node = Node(
