@@ -52,9 +52,8 @@ private:
         std::shared_ptr<const GrabDrink::Goal> goal)
     {
         (void)uuid;
-        RCLCPP_INFO(LOGGER, "Received goal request for drink at position [%.3f, %.3f, %.3f] in frame '%s'",
-                    goal->target_position.x, goal->target_position.y, goal->target_position.z,
-                    goal->target_frame.c_str());
+        RCLCPP_INFO(LOGGER, "Received goal request for drink at position [%.3f, %.3f, %.3f] in depth_camera_link_optical frame",
+                    goal->targetx, goal->targety, goal->targetz);
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     }
 
@@ -87,16 +86,18 @@ private:
             goal_handle->publish_feedback(feedback);
 
             geometry_msgs::msg::PointStamped target_point_in, target_point_out;
-            target_point_in.header.frame_id = goal->target_frame;
+            target_point_in.header.frame_id = "depth_camera_link_optical";
             target_point_in.header.stamp = this->now();
-            target_point_in.point = goal->target_position;
+            target_point_in.point.x = goal->targetx;
+            target_point_in.point.y = goal->targety;
+            target_point_in.point.z = goal->targetz;
 
             // Wait for transform
-            if (!tf_buffer_->canTransform("base_link", goal->target_frame, tf2::TimePointZero,
+            if (!tf_buffer_->canTransform("base_link", "depth_camera_link_optical", tf2::TimePointZero,
                                           tf2::durationFromSec(5.0))) {
-                RCLCPP_ERROR(LOGGER, "Cannot transform from '%s' to 'base_link'", goal->target_frame.c_str());
+                RCLCPP_ERROR(LOGGER, "Cannot transform from 'depth_camera_link_optical' to 'base_link'");
                 result->success = false;
-                result->message = "Transform unavailable from " + goal->target_frame + " to base_link";
+                result->message = "Transform unavailable from depth_camera_link_optical to base_link";
                 goal_handle->abort(result);
                 return;
             }

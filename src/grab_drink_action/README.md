@@ -4,7 +4,7 @@ A ROS2 action server for grabbing drinks using MoveIt Task Constructor.
 
 ## Overview
 
-This package provides an action server that accepts grab requests with drink coordinates in any frame (default: `depth_camera_link_optical`) and executes a grab sequence using MoveIt Task Constructor.
+This package provides an action server that accepts grab requests with drink coordinates in the `depth_camera_link_optical` frame and executes a grab sequence using MoveIt Task Constructor.
 
 ## Action Interface
 
@@ -13,11 +13,14 @@ This package provides an action server that accepts grab requests with drink coo
 
 ### Goal Message
 ```
-geometry_msgs/Point target_position      # Drink position
-string target_frame                      # Frame of target_position (e.g., "depth_camera_link_optical")
+float64 targetx                          # X-coordinate of drink (in depth_camera_link_optical frame)
+float64 targety                          # Y-coordinate of drink (in depth_camera_link_optical frame)
+float64 targetz                          # Z-coordinate of drink (in depth_camera_link_optical frame)
 ```
 
-**Note:** Drink dimensions are hardcoded (height: 0.122m, radius: 0.033m for standard can size).
+**Notes:**
+- All coordinates are in the `depth_camera_link_optical` frame
+- Drink dimensions are hardcoded (height: 0.122m, radius: 0.033m for standard can size)
 
 ### Feedback Message
 ```
@@ -51,10 +54,11 @@ ros2 launch grab_drink_action grab_drink_server.launch.py
 ### Send a Goal via Command Line
 
 ```bash
-# Basic example - grab drink at x=0, y=0.1, z=0.4 in depth_camera_link_optical frame
+# Basic example - grab drink at x=0, y=0.1, z=0.65 in depth_camera_link_optical frame
 ros2 action send_goal /grab_drink grab_drink_action/action/GrabDrink "{
-  target_position: {x: 0, y: 0.09, z: 0.65},
-  target_frame: 'depth_camera_link_optical'
+  targetx: 0.0,
+  targety: 0.09,
+  targetz: 0.65
 }" --feedback
 ```
 
@@ -72,10 +76,11 @@ class GrabDrinkClient(Node):
         super().__init__('grab_drink_client')
         self._action_client = ActionClient(self, GrabDrink, 'grab_drink')
 
-    def send_goal(self, x, y, z, frame='depth_camera_link_optical'):
+    def send_goal(self, x, y, z):
         goal_msg = GrabDrink.Goal()
-        goal_msg.target_position = Point(x=x, y=y, z=z)
-        goal_msg.target_frame = frame
+        goal_msg.targetx = x
+        goal_msg.targety = y
+        goal_msg.targetz = z
 
         self._action_client.wait_for_server()
 

@@ -201,28 +201,10 @@ def generate_launch_description():
         )
     )
 
-    # rosapi node - provides service introspection for MCP server
-    rosapi_node = Node(
-        package='rosapi',
-        executable='rosapi_node',
-        name='rosapi',
-        parameters=[{
-            'topics_glob': '[*]',
-            'services_glob': '[*]',
-            'params_glob': '[*]'
-        }],
-        output='screen'
-    )
-
     # Timed optional processes
     rosbridge_timer = TimerAction(
         period=1.0,
         actions=[rosbridge_server]
-    )
-
-    rosapi_timer = TimerAction(
-        period=1.5,
-        actions=[rosapi_node]
     )
 
     gemini_ros_mcp = ExecuteProcess(
@@ -252,7 +234,7 @@ def generate_launch_description():
     
     # Timer for initial pose publisher - start after localization is ready
     initial_pose_timer = TimerAction(
-        period=15.0,  # Wait for gazebo to be ready
+        period=20.0,  # Wait for gazebo to be ready
         actions=[initial_pose_publisher]
     )
     
@@ -270,16 +252,15 @@ def generate_launch_description():
         sim_launch,
 
         # Timed component launches
-        #nav2_timer,
-        #localization_timer,
+        nav2_timer,
+        localization_timer,
         move_group_timer,
         action_servers_timer,
-        #initial_pose_timer,
+        initial_pose_timer,
 
         # Optional components
         #gemini,
         teleop,
         rosbridge_timer,
-        rosapi_timer,
         gemini_ros_mcp_timer
     ])

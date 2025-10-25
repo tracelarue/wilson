@@ -6,10 +6,10 @@ locate_drink_action_server:
     position_tolerance: 0.02  # Position tolerance (meters) - success when within this range
 
     # Control parameters (proportional control gains)
-    k_linear: 0.5       # Linear velocity gain (higher = faster forward/backward movement)
-    k_angular: 0.5      # Angular velocity gain (higher = faster rotation)
-    max_linear_vel: 0.3  # Maximum linear velocity (m/s)
-    max_angular_vel: 0.5 # Maximum angular velocity (rad/s)
+    k_linear: 1.0       # Linear velocity gain (higher = faster forward/backward movement)
+    k_angular: 1.0      # Angular velocity gain (higher = faster rotation)
+    max_linear_vel: 1.0  # Maximum linear velocity (m/s)
+    max_angular_vel: 1.0 # Maximum angular velocity (rad/s)
     min_movement_threshold: 0.005  # Minimum velocity to prevent oscillations
 
     # Camera parameters - SIMULATION (Gazebo)
@@ -21,7 +21,7 @@ locate_drink_action_server:
     depth_sample_size: 5 # Number of pixels (NxN window) to average for depth calculation
 
     # Operation parameters
-    max_detection_attempts: 5   # Maximum number of detection attempts before failure
+    max_detection_attempts: 3   # Maximum number of detection attempts before failure
     control_loop_rate: 2.0      # Control loop frequency (Hz) - balance responsiveness vs API costs
     overall_timeout: 60.0       # Overall operation timeout (seconds)
     api_timeout: 10.0           # Gemini API timeout (seconds)

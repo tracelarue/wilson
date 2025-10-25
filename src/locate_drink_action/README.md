@@ -74,7 +74,7 @@ ros2 launch locate_drink_action locate_drink_server.launch.py
 Using the command line:
 ```bash
 ros2 action send_goal /locate_drink locate_drink_action/action/LocateDrink \
-  "{drink_name: 'Coca Cola'}" --feedback
+  "{drinkname: 'Coca Cola'}" --feedback
 ```
 
 Using Python:
@@ -91,7 +91,7 @@ class LocateDrinkClient(Node):
 
     def send_goal(self, drink_name):
         goal_msg = LocateDrink.Goal()
-        goal_msg.drink_name = drink_name
+        goal_msg.drinkname = drink_name
 
         self._action_client.wait_for_server()
         self._send_goal_future = self._action_client.send_goal_async(
@@ -167,7 +167,7 @@ All parameters are configurable via [config/locate_drink_params.yaml](config/loc
 
 ### Goal
 ```
-string drink_name  # Name of the drink to locate (e.g., "Coca Cola", "Sprite", "Water bottle")
+string drinkname  # Name of the drink to locate (e.g., "Coca Cola", "Sprite", "Water bottle")
 ```
 
 ### Result
@@ -302,7 +302,7 @@ This package is designed to work with the Wilson robot system. To integrate:
    def locate_drink_tool(self, drink_name):
        """Tool for Gemini to locate drinks."""
        goal = LocateDrink.Goal()
-       goal.drink_name = drink_name
+       goal.drinkname = drink_name
 
        future = self.locate_drink_client.send_goal_async(goal)
        # Handle result...

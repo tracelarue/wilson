@@ -38,22 +38,8 @@ MODEL = "models/gemini-2.5-flash-live-preview"
 DEFAULT_VIDEO_MODE = "none"  # Options: "camera", "screen", "none"
 DEFAULT_RESPONSE_MODALITY = "AUDIO"  # Options: "TEXT", "AUDIO"
 
-# System instructions to guide Gemini's behavior and tool usage.
-system_instructions = """
-    You have access to the tools provided by ros_mcp_server.
-    Start by connecting to the robot on ip 192.168.52.129, port 9090.
-    When successfuly connected, reply just "Succesfully connected".
-    You can go to known locations.
-    Known locations are:
-    - kitchen = {2.5, -5.94, 0} {0,0,0,1}
-    - living room = {1.6, 0.0, 0} {0,0,0,1}
-    - front door = {-0.1, -7.94, 0} {0,0,0,1}
-    - back door = {0.0, -0.41, 0} {0,0,0,1}
-    - dining room = {0.1, -3.44, 0} {0,0,0,1}
-    - restroom = {3.2, -7.94, 0} {0,0,0,1}
-
-    When receiving a tool result from send_action_goal use the status field. Status=4 means success. If the tool response is empty assume success.
-    """
+# System instructions are loaded from separate files based on mode
+# See system_instructions_sim.txt and system_instructions_real.txt
 
 
 # Audio resampling functions
@@ -103,6 +89,27 @@ def load_mcp_config():
 
     server_config = config["mcpServers"]["ros-mcp-server"]
     return server_config
+
+
+def load_system_instructions(mode):
+    """Load system instructions from file based on mode."""
+    if mode == "sim":
+        instructions_file = "system_instructions_sim.txt"
+    elif mode == "robot":
+        instructions_file = "system_instructions_real.txt"
+    else:
+        raise ValueError(f"Invalid mode: {mode}. Must be 'sim' or 'robot'")
+
+    instructions_path = os.path.join(os.path.dirname(__file__), instructions_file)
+
+    if not os.path.exists(instructions_path):
+        raise FileNotFoundError(
+            f"System instructions file not found at {instructions_path}. "
+            f"Please ensure {instructions_file} exists."
+        )
+
+    with open(instructions_path, "r") as f:
+        return f.read()
 
 
 def list_audio_devices():
@@ -277,6 +284,9 @@ class AudioLoop:
         self.video_mode = video_mode
         self.response_modality = response_modality
         self.active_muting = active_muting
+
+        # Load system instructions based on mode
+        self.system_instructions = load_system_instructions(mode)
 
         # Audio format constants
         self.format = pyaudio.paInt16
@@ -916,7 +926,7 @@ class AudioLoop:
                             prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Charon")
                         )
                     ),
-                    system_instruction=types.Content(parts=[types.Part(text=system_instructions)]),
+                    system_instruction=types.Content(parts=[types.Part(text=self.system_instructions)]),
                     tools=tools,
                 )
 

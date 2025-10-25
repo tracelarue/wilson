@@ -202,7 +202,7 @@ class LocateDrinkActionServer(Node):
 
     def goal_callback(self, goal_request):
         """Handle new goal requests."""
-        self.get_logger().info(f'Received goal to locate drink: {goal_request.drink_name}')
+        self.get_logger().info(f'Received goal to locate drink: {goal_request.drinkname}')
         return GoalResponse.ACCEPT
 
     def cancel_callback(self, goal_handle):
@@ -216,7 +216,7 @@ class LocateDrinkActionServer(Node):
 
         Uses closed-loop control to position the robot optimally relative to the detected drink.
         """
-        self.get_logger().info(f'Executing goal: Locate {goal_handle.request.drink_name}')
+        self.get_logger().info(f'Executing goal: Locate {goal_handle.request.drinkname}')
 
         # Initialize result
         result = LocateDrink.Result()
@@ -261,14 +261,14 @@ class LocateDrinkActionServer(Node):
 
                 # Attempt to detect and localize the drink
                 feedback.detection_attempts += 1
-                feedback.current_status = f'Detecting {goal_handle.request.drink_name}... (attempt {feedback.detection_attempts})'
+                feedback.current_status = f'Detecting {goal_handle.request.drinkname}... (attempt {feedback.detection_attempts})'
 
-                detection_result = self._detect_and_localize_drink(goal_handle.request.drink_name)
+                detection_result = self._detect_and_localize_drink(goal_handle.request.drinkname)
 
                 if detection_result is None:
                     # Detection failed
                     if feedback.detection_attempts >= self.max_detection_attempts:
-                        result.message = f'Failed to detect {goal_handle.request.drink_name} after {feedback.detection_attempts} attempts'
+                        result.message = f'Failed to detect {goal_handle.request.drinkname} after {feedback.detection_attempts} attempts'
                         self.get_logger().error(result.message)
                         self._stop_robot()
                         break
@@ -303,12 +303,12 @@ class LocateDrinkActionServer(Node):
                 )
 
                 # Publish RViz marker with adjusted z position
-                self._publish_marker(current_x, current_y, current_z_adjusted, goal_handle.request.drink_name)
+                self._publish_marker(current_x, current_y, current_z_adjusted, goal_handle.request.drinkname)
 
                 # Check if within tolerance
                 if abs(error_x) < self.position_tolerance and abs(error_z) < self.position_tolerance:
                     result.success = True
-                    result.message = f'Successfully positioned relative to {goal_handle.request.drink_name}'
+                    result.message = f'Successfully positioned relative to {goal_handle.request.drinkname}'
                     result.final_position = Point(x=current_x, y=current_y, z=current_z_adjusted)
                     self.get_logger().info(result.message)
                     self._stop_robot()

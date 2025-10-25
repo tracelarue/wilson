@@ -1,5 +1,5 @@
 # Goal: Drink name to locate
-string drink_name
+string drinkname
 ---
 # Result: Final positioning outcome
 bool success

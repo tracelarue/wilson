@@ -1,6 +1,7 @@
-# Goal: Drink to grab
-geometry_msgs/Point target_position
-string target_frame  # Frame in which target_position is specified (e.g., "depth_camera_link_optical")
+# Goal: Drink to grab (coordinates in depth_camera_link_optical frame)
+float64 targetx  # X-coordinate of drink
+float64 targety  # Y-coordinate of drink
+float64 targetz  # Z-coordinate of drink
 ---
 # Result: Success/failure
 bool success
