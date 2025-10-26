@@ -444,7 +444,7 @@ private:
             {
                 auto stage = std::make_unique<mtc::stages::MoveTo>("close hand", interpolation_planner);
                 stage->setGroup(hand_group_name);
-                stage->setGoal("close");
+                stage->setGoal("can");
                 grasp->insert(std::move(stage));
             }
 
