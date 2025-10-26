@@ -1,0 +1,13 @@
+# Goal: Drink to grab (coordinates in depth_camera_link_optical frame)
+float64 targetx  # X-coordinate of drink
+float64 targety  # Y-coordinate of drink
+float64 targetz  # Z-coordinate of drink
+---
+# Result: Success/failure
+bool success
+string message
+geometry_msgs/Pose final_drink_pose
+---
+# Feedback: Current stage of execution
+string current_stage
+float32 progress_percentage

@@ -8,7 +8,7 @@ class DepthPixelReader(Node):
         super().__init__('depth_pixel_reader')
         self.subscription = self.create_subscription(
             Image,
-            '/camera/depth/image_raw',
+            '/depth_camera/depth/image_raw',
             self.listener_callback,
             1)
         self.bridge = CvBridge()

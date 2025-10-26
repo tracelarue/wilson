@@ -1,0 +1,14 @@
+# Goal: Drink name to locate
+string drinkname
+---
+# Result: Final positioning outcome
+bool success
+string message
+geometry_msgs/Point final_position  # Final 3D position relative to depth_camera_link_optical
+---
+# Feedback: Current positioning status
+string current_status
+geometry_msgs/Point current_position  # Current 3D position of drink
+float32 error_x  # Horizontal error from target (meters)
+float32 error_z  # Distance error from target (meters)
+uint8 detection_attempts  # Number of detection attempts made

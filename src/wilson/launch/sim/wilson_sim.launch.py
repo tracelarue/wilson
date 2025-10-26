@@ -7,6 +7,7 @@ from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, Time
 from launch.launch_description_sources import PythonLaunchDescriptionSource, AnyLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from moveit_configs_utils import MoveItConfigsBuilder
 
 
 def load_yaml_params(file_path):
@@ -19,6 +20,10 @@ def generate_launch_description():
     # Package configuration
     package_name = 'wilson'
     pkg_path = get_package_share_directory(package_name)
+    
+    # Get workspace root - assumes wilson package is in src/wilson
+    workspace_root = os.path.abspath(os.path.join(pkg_path, '..', '..', '..', '..'))
+    gemini_mcp_path = os.path.join(workspace_root, 'src', 'gemini_mcp')
     
     # Configuration files
     sim_params_file = os.path.join(pkg_path, 'config', 'sim_params.yaml')
@@ -126,6 +131,41 @@ def generate_launch_description():
         }.items(),
     )
 
+    # Load MoveIt configuration (adjust the package name to match your robot's MoveIt config)
+    moveit_config = MoveItConfigsBuilder("wilson", package_name="wilson_moveit_config").to_moveit_configs()
+
+    # Grab Drink Action Server Node
+    grab_drink_server_node = Node(
+        package="grab_drink_action",
+        executable="grab_drink_action_server",
+        name="grab_drink_action_server",
+        output="screen",
+        parameters=[
+            moveit_config.robot_description,
+            moveit_config.robot_description_semantic,
+            moveit_config.robot_description_kinematics,
+            moveit_config.planning_pipelines,
+            moveit_config.joint_limits,
+        ],
+    )
+
+    # Locate Drink Action Server Node
+    locate_drink_params_file = os.path.join(
+        get_package_share_directory('locate_drink_action'),
+        'config',
+        'locate_drink_params_sim.yaml'
+    )
+
+    locate_drink_server_node = Node(
+        package="locate_drink_action",
+        executable="locate_drink_action_server",
+        name="locate_drink_action_server",
+        output="screen",
+        parameters=[locate_drink_params_file],
+    )
+
+    
+
     # Timed launches to ensure proper startup sequence
     nav2_timer = TimerAction(
         period=3.0,
@@ -141,16 +181,16 @@ def generate_launch_description():
         period=8.0,
         actions=[move_group_launch]
     )
-    
-    # Optional external processes
-    gemini = ExecuteProcess(
-        cmd=['tilix', '-e', 'ros2', 'run', 'gemini', 'gemini_node', '--mode', 'sim', '--video', 'camera'],
-        output='screen',
+
+    # Action servers timer - start after move_group
+    action_servers_timer = TimerAction(
+        period=10.0,
+        actions=[grab_drink_server_node, locate_drink_server_node]
     )
 
     # Teleop keyboard in separate terminal
     teleop = ExecuteProcess(
-        cmd=['tilix', '-e', 'ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap cmd_vel:=/diff_drive_controller/cmd_vel_unstamped'],
+        cmd=['tilix', '-e', 'ros2', 'run', 'teleop_twist_keyboard', 'teleop_twist_keyboard', '--ros-args', '--remap', 'cmd_vel:=/diff_drive_controller/cmd_vel_unstamped'],
         output='screen',
     )
     
@@ -160,7 +200,7 @@ def generate_launch_description():
             os.path.join(get_package_share_directory('rosbridge_server'), 'launch', 'rosbridge_websocket_launch.xml')
         )
     )
-    
+
     # Timed optional processes
     rosbridge_timer = TimerAction(
         period=1.0,
@@ -168,7 +208,8 @@ def generate_launch_description():
     )
 
     gemini_ros_mcp = ExecuteProcess(
-        cmd=['tilix', '-e', 'cd /home/trace/wilson/gemini_live && uv run gemini_live.py'],
+        cmd=['tilix', '-e', 'bash', '-c', 'python3 gemini_client.py --responses=TEXT; echo "\n\nScript exited. Press Enter to close..."; read'],
+        cwd=gemini_mcp_path,
         output='screen',
     )
 
@@ -206,19 +247,20 @@ def generate_launch_description():
         declare_initial_pose_x,
         declare_initial_pose_y,
         declare_initial_pose_yaw,
-        
+
         # Core simulation
         sim_launch,
-        
+
         # Timed component launches
         nav2_timer,
         localization_timer,
         move_group_timer,
+        action_servers_timer,
         initial_pose_timer,
-        
+
         # Optional components
-        gemini,
+        #gemini,
         teleop,
         rosbridge_timer,
-        #gemini_ros_mcp_timer
+        gemini_ros_mcp_timer
     ])

@@ -107,10 +107,10 @@ def generate_launch_description():
         PythonLaunchDescriptionSource([os.path.join(get_package_share_directory('ldlidar_stl_ros2'),'launch','ld19.launch.py')])
     )
 
-    tof_pointcloud = Node(
+    depth_field = Node(
         package='depth_cam',
-        executable='tof_pointcloud',
-        name='tof_pointcloud',
+        executable='depth_field',
+        name='depth_field',
         output='screen',
         # No arguments to avoid issues with argument parsing
         parameters=[{
@@ -128,7 +128,7 @@ def generate_launch_description():
             'video_device': '/dev/video8',          # Adjust as needed
             'camera_frame_id': 'camera_link_optical',
             'pixel_format': 'YUYV',                 # Common format
-            'image_size': [1280, 480],               # Adjust as needed
+            'image_size': [1080, 1080],               # Adjust as needed
             'framerate': 30.0,
         }]
     )
@@ -145,8 +145,8 @@ def generate_launch_description():
         delayed_gripper_controller_spawner,
         delayed_jointstate_broadcaster_spawner,
         twist_mux,
-        #ld19_launch,
-        #tof_pointcloud,
-        #v4l2_camera_node,
+        ld19_launch,
+        depth_field,
+        v4l2_camera_node,
 
     ])

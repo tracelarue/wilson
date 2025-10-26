@@ -1,4 +1,4 @@
-image: downstairs_sim.pgm
+image: downstairs_sim_edit.pgm
 mode: trinary
 resolution: 0.05
 origin: [-3.62, -3.73, 0]

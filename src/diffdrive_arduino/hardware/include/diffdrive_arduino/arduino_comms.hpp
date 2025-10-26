@@ -95,6 +95,14 @@ public:
 
     val_1 = std::atoi(token_1.c_str());
     val_2 = std::atoi(token_2.c_str());
+    
+    // Debug: Log raw encoder response
+    static auto last_log = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_log).count() >= 500) {
+      std::cout << "Arduino encoder response: '" << response << "' -> val_1=" << val_1 << ", val_2=" << val_2 << std::endl;
+      last_log = now;
+    }
   }
   void set_motor_values(int val_1, int val_2)
   {

@@ -12,5 +12,4 @@
     <xacro:include filename="camera.xacro" />
     <xacro:include filename="depth_camera.xacro" />
     <xacro:include filename="gazebo_references.xacro" />
-
 </robot>

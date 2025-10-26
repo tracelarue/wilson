@@ -80,7 +80,7 @@ Parameter Description:
 def generate_launch_description():
   # Auto-detect LIDAR port
   #lidar_port = find_lidar_port()
-  lidar_port = '/dev/ttyUSB1'
+  lidar_port = '/dev/ttyUSB0'
   print(f"LIDAR port: {lidar_port}")
   
   # LDROBOT LiDAR publisher node
