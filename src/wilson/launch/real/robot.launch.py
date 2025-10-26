@@ -34,6 +34,7 @@ def generate_launch_description():
     )
 
 
+
     controller_manager = Node(
         package="controller_manager",
         executable="ros2_control_node",

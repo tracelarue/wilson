@@ -85,7 +85,7 @@ class DepthFieldNode(Node):
         self.timer = None
         self.r = None
         self.info = None
-        self.preview_enabled = True  # Set to False to disable OpenCV preview
+        self.preview_enabled = False  # Set to False to disable OpenCV preview
         # Crop settings to match RGB camera aspect ratio (16:9)
         self.crop_width = 220
         self.crop_height = 135

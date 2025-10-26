@@ -48,11 +48,11 @@ def generate_launch_description():
             'video_device': '/dev/video8',
             'camera_frame_id': 'camera_link_optical',
             'pixel_format': 'YUYV',
-            'image_size': [1080, 1080],
+            'image_size': [1280, 720], #1280x720 max
             'framerate': 30.0,
         }],
         remappings=[
-            ('/v4l2_camera/image_raw', '/rgb_camera/image_raw')
+            ('/image_raw', '/rgb_camera/image_raw')
         ]
     )
 

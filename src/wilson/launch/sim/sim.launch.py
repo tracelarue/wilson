@@ -55,6 +55,14 @@ def generate_launch_description():
             'params_file': params_file
         }.items()
     )
+    set_rviz_log_level = SetEnvironmentVariable('ROSCONSOLE_MIN_SEVERITY', 'WARN')
+    rviz2 = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        arguments=['-d', os.path.join(pkg_path, 'config', 'rviz', 'sim.rviz'), '--ros-args', '--log-level', 'WARN'],
+        parameters=[{'use_sim_time': use_sim_time}],
+    )
 
     # Include Gazebo
     gazebo = IncludeLaunchDescription(
@@ -128,9 +136,11 @@ def generate_launch_description():
     return LaunchDescription([
         # Launch arguments
         declare_params_file,
+        set_rviz_log_level,
         
         # Core simulation components
         rsp,
+        rviz2,
         gazebo,
         spawn_robot,
         

@@ -5,6 +5,7 @@ from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, Time
 from launch.launch_description_sources import PythonLaunchDescriptionSource, AnyLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from moveit_configs_utils import MoveItConfigsBuilder
 
 
 def generate_launch_description():
@@ -36,6 +37,24 @@ def generate_launch_description():
         'autostart',
         default_value='true',
         description='Automatically startup the nav2 stack'
+    )
+
+    declare_initial_pose_x = DeclareLaunchArgument(
+        'initial_pose_x',
+        default_value='0.0',
+        description='Initial pose X coordinate for AMCL'
+    )
+
+    declare_initial_pose_y = DeclareLaunchArgument(
+        'initial_pose_y',
+        default_value='0.0',
+        description='Initial pose Y coordinate for AMCL'
+    )
+
+    declare_initial_pose_yaw = DeclareLaunchArgument(
+        'initial_pose_yaw',
+        default_value='0.0',
+        description='Initial pose yaw angle in radians for AMCL'
     )
 
         # Launch real robot
@@ -91,6 +110,46 @@ def generate_launch_description():
         actions=[move_group_launch]
     )
 
+    # Load MoveIt configuration for action servers
+    moveit_config = MoveItConfigsBuilder("wilson", package_name="wilson_moveit_config").to_moveit_configs()
+
+    # Locate Drink Action Server node (using real robot parameters)
+    locate_drink_params_file = os.path.join(
+        get_package_share_directory('locate_drink_action'),
+        'config',
+        'locate_drink_params_real.yaml'
+    )
+
+    locate_drink_server_node = Node(
+        package='locate_drink_action',
+        executable='locate_drink_action_server',
+        name='locate_drink_action_server',
+        output='screen',
+        parameters=[locate_drink_params_file],
+        emulate_tty=True,
+    )
+
+    # Grab Drink Action Server node
+    grab_drink_server_node = Node(
+        package='grab_drink_action',
+        executable='grab_drink_action_server',
+        name='grab_drink_action_server',
+        output='screen',
+        parameters=[
+            moveit_config.robot_description,
+            moveit_config.robot_description_semantic,
+            moveit_config.robot_description_kinematics,
+            moveit_config.planning_pipelines,
+            moveit_config.joint_limits,
+        ],
+    )
+
+    # Timer for action servers - start after move_group is ready
+    action_servers_timer = TimerAction(
+        period=13.0,
+        actions=[locate_drink_server_node, grab_drink_server_node]
+    )
+
     # Add timer to start navigation after Gazebo is ready
     nav2_timer = TimerAction(
         period=10.0,
@@ -109,13 +168,13 @@ def generate_launch_description():
         output='screen',
     )
 
-        # for use with ros-mcp-server
-    rosbridge_server = IncludeLaunchDescription(
-        AnyLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('rosbridge_server'), 'launch', 'rosbridge_websocket_launch.xml')
-        )
+
+    rosbridge_server = ExecuteProcess(
+        cmd=['tilix', '-e', 'ros2', 'launch', 'rosbridge_server', 'rosbridge_websocket_launch.xml'],
+        cwd='/wilson',
+        output='screen',
     )
-    
+
     # Timed optional processes
     rosbridge_timer = TimerAction(
         period=1.0,
@@ -164,10 +223,14 @@ def generate_launch_description():
         declare_use_sim_time,
         declare_map_yaml,
         declare_autostart,
+        declare_initial_pose_x,
+        declare_initial_pose_y,
+        declare_initial_pose_yaw,
         robot_launch,
         move_group_timer,
         nav2_timer,
         localization_timer,
+        action_servers_timer,
         #gemini,
         teleop,
         rosbridge_timer,

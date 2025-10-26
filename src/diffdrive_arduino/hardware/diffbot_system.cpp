@@ -216,11 +216,6 @@ hardware_interface::return_type DiffDriveArduinoHardware::read(
   wheel_r_.pos = wheel_r_.calc_enc_angle();
   wheel_r_.vel = (wheel_r_.pos - pos_prev) / delta_seconds;
 
-  // Constant encoder count printing (every read cycle)
-  RCLCPP_INFO(rclcpp::get_logger("DiffDriveArduinoHardware"),
-              "ENCODERS - Left: %d, Right: %d",
-              wheel_l_.enc, wheel_r_.enc);
-
   return hardware_interface::return_type::OK;
 }
 
@@ -234,17 +229,7 @@ hardware_interface::return_type diffdrive_arduino ::DiffDriveArduinoHardware::wr
 
   int motor_l_counts_per_loop = wheel_l_.cmd / wheel_l_.rads_per_count / cfg_.loop_rate;
   int motor_r_counts_per_loop = wheel_r_.cmd / wheel_r_.rads_per_count / cfg_.loop_rate;
-  
-  // Debug logging
-  static auto last_log_time = std::chrono::steady_clock::now();
-  auto now = std::chrono::steady_clock::now();
-  //if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_log_time).count() >= 500) {
-  //  RCLCPP_INFO(rclcpp::get_logger("DiffDriveArduinoHardware"),
-  //              "WRITE - Left Cmd: %.3f -> %d counts, Right Cmd: %.3f -> %d counts",
-  //              wheel_l_.cmd, motor_l_counts_per_loop, wheel_r_.cmd, motor_r_counts_per_loop);
-  //  last_log_time = now;
-  //}
-  
+
   comms_.set_motor_values(motor_l_counts_per_loop, motor_r_counts_per_loop);
   return hardware_interface::return_type::OK;
 }

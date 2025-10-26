@@ -74,7 +74,7 @@ ros2 launch locate_drink_action locate_drink_server.launch.py
 Using the command line:
 ```bash
 ros2 action send_goal /locate_drink locate_drink_action/action/LocateDrink \
-  "{drinkname: 'Coca Cola'}" --feedback
+  "{drinkname: 'soda'}" --feedback
 ```
 
 Using Python:

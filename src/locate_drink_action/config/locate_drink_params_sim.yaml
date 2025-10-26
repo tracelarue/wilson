@@ -19,6 +19,7 @@ locate_drink_action_server:
     image_width: 640     # Image width in pixels
     image_height: 480    # Image height in pixels
     depth_sample_size: 5 # Number of pixels (NxN window) to average for depth calculation
+    bbox_shift_ratio: 0.0 # Horizontal shift for depth sampling as ratio of bbox height (sim cameras are aligned, no offset needed)
 
     # Operation parameters
     max_detection_attempts: 3   # Maximum number of detection attempts before failure
