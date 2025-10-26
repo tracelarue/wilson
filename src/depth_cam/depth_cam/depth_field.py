@@ -78,6 +78,7 @@ class DepthFieldNode(Node):
     def __init__(self):
         super().__init__('depth_field_node')
         self.publisher_ = self.create_publisher(Image, 'depth_field', 10)
+        self.rgb_publisher_ = self.create_publisher(Image, 'depth_image/rgb', 10)
         self.bridge = CvBridge()
         self.cam = ac.ArducamCamera()
         self.cfg_path = None
@@ -85,6 +86,13 @@ class DepthFieldNode(Node):
         self.r = None
         self.info = None
         self.preview_enabled = True  # Set to False to disable OpenCV preview
+        # Crop settings to match RGB camera aspect ratio (16:9)
+        self.crop_width = 220
+        self.crop_height = 135
+        # Depth calibration: Quadratic fit formula
+        # real_distance = 0.00016516 × reading² + 0.844471 × reading - 36.944
+        # Polynomial coefficients in numpy format [a, b, c] for a*x^2 + b*x + c
+        self.poly_coeffs = np.array([0.00016516, 0.844471, -36.944])
         self.init_camera()
 
     def init_camera(self):
@@ -107,10 +115,6 @@ class DepthFieldNode(Node):
         if self.preview_enabled:
             cv2.namedWindow("preview", cv2.WINDOW_AUTOSIZE)
             cv2.setMouseCallback("preview", on_mouse)
-            if self.info.device_type == ac.DeviceType.VGA:
-                cv2.createTrackbar(
-                    "confidence", "preview", confidence_value, 255, on_confidence_changed
-                )
         self.timer = self.create_timer(0.03, self.timer_callback)  # ~30Hz
 
     def timer_callback(self):
@@ -118,17 +122,41 @@ class DepthFieldNode(Node):
         if frame is not None and isinstance(frame, ac.DepthData):
             depth_buf = frame.depth_data
             confidence_buf = frame.confidence_data
-            # Correct depth values by subtracting 50mm, clamp to 0
-            depth_buf = np.maximum(depth_buf - 45, 0)
+            # Apply polynomial calibration: actual = a*measured^2 + b*measured + c
+            depth_buf = np.polyval(self.poly_coeffs, depth_buf)
+            # Clamp negative values to 0
+            depth_buf = np.maximum(depth_buf, 0)
+
+            # Center crop to match RGB camera aspect ratio
+            # Additional offset: 19 pixels off top, 14 pixels off bottom, 5 pixels in from each side
+            height, width = depth_buf.shape
+            center_y = height // 2
+            center_x = width // 2
+            y_start = center_y - (self.crop_height // 2) + 19  # Shift down (remove 19 from top)
+            y_end = y_start + self.crop_height - 19  # Remove 14 pixels from bottom
+            x_start = center_x - (self.crop_width // 2)
+            x_end = x_start + self.crop_width
+            depth_buf = depth_buf[y_start:y_end, x_start:x_end]
+            confidence_buf = confidence_buf[y_start:y_end, x_start:x_end]
             # Publish depth field as Image
             depth_img_msg = self.bridge.cv2_to_imgmsg(depth_buf.astype(np.float32), encoding='32FC1')
             self.publisher_.publish(depth_img_msg)
+
+            # Create and publish RGB depth visualization
+            # Normalize depth to 0-2000mm range and convert to 8-bit
+            rgb_depth = (depth_buf * (255.0 / 2000.0)).astype(np.uint8)
+            # Apply rainbow colormap
+            rgb_depth = cv2.applyColorMap(rgb_depth, cv2.COLORMAP_RAINBOW)
+            # Apply confidence filtering (black out low-confidence pixels)
+            rgb_depth = getPreviewRGB(rgb_depth, confidence_buf)
+            # Publish RGB depth image
+            rgb_img_msg = self.bridge.cv2_to_imgmsg(rgb_depth, encoding='bgr8')
+            self.rgb_publisher_.publish(rgb_img_msg)
+
             if self.preview_enabled:
-                result_image = (depth_buf * (255.0 / self.r)).astype(np.uint8)
+                result_image = (depth_buf * (255.0 / 2000.0)).astype(np.uint8)
                 result_image = cv2.applyColorMap(result_image, cv2.COLORMAP_RAINBOW)
                 result_image = getPreviewRGB(result_image, confidence_buf)
-                cv2.normalize(confidence_buf, confidence_buf, 1, 0, cv2.NORM_MINMAX)
-                cv2.imshow("preview_confidence", confidence_buf)
                 cv2.rectangle(result_image, followRect.rect, (255,255,255), 1)
                 if not selectRect.empty:
                     cv2.rectangle(result_image, selectRect.rect, (0,0,0), 2)
