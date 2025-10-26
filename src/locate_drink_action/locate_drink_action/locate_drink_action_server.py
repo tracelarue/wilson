@@ -535,63 +535,63 @@ class LocateDrinkActionServer(Node):
             x_3d, y_3d, z_3d = self._calculate_3d_position(depth_center_x, depth_center_y, depth)
 
             # === VISUALIZATION DEBUG ===
-            # Uncomment the following section to enable debug visualization windows
-            #
-            # # Display 3 debug images in separate windows
-            #
-            # # Window 1: Gemini input image (thumbnailed)
-            # gemini_display_img = np.array(img)
-            # gemini_bgr = cv2.cvtColor(gemini_display_img, cv2.COLOR_RGB2BGR)
-            #
-            # # Window 2: Original RGB image with bounding box
-            # rgb_with_bbox = cv_rgb_image.copy()
-            # cv2.rectangle(rgb_with_bbox, (norm_x1, norm_y1), (norm_x2, norm_y2), (0, 255, 0), 3)
-            # cv2.circle(rgb_with_bbox, (center_x, center_y), 8, (255, 0, 0), -1)
-            # # Add text with position info
-            # text = f"RGB Center: ({center_x}, {center_y})"
-            # cv2.putText(rgb_with_bbox, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            # text2 = f"Shift: {horizontal_shift}px (0.5 * height={bbox_height})"
-            # cv2.putText(rgb_with_bbox, text2, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            # text3 = f"BBox: ({norm_x1},{norm_y1}) -> ({norm_x2},{norm_y2})"
-            # cv2.putText(rgb_with_bbox, text3, (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            #
-            # # Window 3: Depth image with BOTH bounding boxes
-            # # Normalize depth image for visualization
-            # depth_normalized = cv2.normalize(cv_depth_image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-            # depth_colored = cv2.applyColorMap(depth_normalized, cv2.COLORMAP_JET)
-            #
-            # # Draw original RGB bbox position in RED (for reference)
-            # cv2.rectangle(depth_colored, (norm_x1, norm_y1), (norm_x2, norm_y2), (0, 0, 255), 2)
-            # cv2.circle(depth_colored, (center_x, center_y), 6, (0, 0, 255), -1)
-            #
-            # # Draw shifted depth bbox in GREEN (actual sampling position)
-            # cv2.rectangle(depth_colored, (depth_x1, depth_y1), (depth_x2, depth_y2), (0, 255, 0), 3)
-            # cv2.circle(depth_colored, (depth_center_x, depth_center_y), 8, (255, 255, 255), -1)
-            #
-            # # Add text
-            # text_depth = f"Depth Center: ({depth_center_x}, {depth_center_y}) = {depth:.3f}m"
-            # cv2.putText(depth_colored, text_depth, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            # text_shift = f"Shift: {horizontal_shift}px right"
-            # cv2.putText(depth_colored, text_shift, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            # text_3d = f"3D: x={x_3d:.3f}m, z={z_3d:.3f}m"
-            # cv2.putText(depth_colored, text_3d, (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            # text_legend = "RED=RGB position, GREEN=Shifted depth sampling"
-            # cv2.putText(depth_colored, text_legend, (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-            #
-            # # Create named windows and display
-            # cv2.namedWindow('1. Gemini Input', cv2.WINDOW_NORMAL)
-            # cv2.namedWindow('2. RGB with BBox', cv2.WINDOW_NORMAL)
-            # cv2.namedWindow('3. Depth with BBox', cv2.WINDOW_NORMAL)
-            #
-            # cv2.imshow('1. Gemini Input', gemini_bgr)
-            # cv2.imshow('2. RGB with BBox', rgb_with_bbox)
-            # cv2.imshow('3. Depth with BBox', depth_colored)
-            #
-            # self.get_logger().info('=== DEBUG WINDOWS DISPLAYED ===')
-            # self.get_logger().info('Press any key on one of the windows to continue...')
-            # cv2.waitKey(0)  # Wait indefinitely for key press
-            # cv2.destroyAllWindows()
-            # cv2.waitKey(1)  # Small delay to ensure windows close properly
+            # Visualization enabled for camera calibration
+
+            # Display 3 debug images in separate windows
+
+            # Window 1: Gemini input image (thumbnailed)
+            gemini_display_img = np.array(img)
+            gemini_bgr = cv2.cvtColor(gemini_display_img, cv2.COLOR_RGB2BGR)
+
+            # Window 2: Original RGB image with bounding box
+            rgb_with_bbox = cv_rgb_image.copy()
+            cv2.rectangle(rgb_with_bbox, (norm_x1, norm_y1), (norm_x2, norm_y2), (0, 255, 0), 3)
+            cv2.circle(rgb_with_bbox, (center_x, center_y), 8, (255, 0, 0), -1)
+            # Add text with position info
+            text = f"RGB Center: ({center_x}, {center_y})"
+            cv2.putText(rgb_with_bbox, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            text2 = f"Shift: {horizontal_shift}px (0.5 * height={bbox_height})"
+            cv2.putText(rgb_with_bbox, text2, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            text3 = f"BBox: ({norm_x1},{norm_y1}) -> ({norm_x2},{norm_y2})"
+            cv2.putText(rgb_with_bbox, text3, (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+            # Window 3: Depth image with BOTH bounding boxes
+            # Normalize depth image for visualization
+            depth_normalized = cv2.normalize(cv_depth_image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+            depth_colored = cv2.applyColorMap(depth_normalized, cv2.COLORMAP_JET)
+
+            # Draw original RGB bbox position in RED (for reference)
+            cv2.rectangle(depth_colored, (norm_x1, norm_y1), (norm_x2, norm_y2), (0, 0, 255), 2)
+            cv2.circle(depth_colored, (center_x, center_y), 6, (0, 0, 255), -1)
+
+            # Draw shifted depth bbox in GREEN (actual sampling position)
+            cv2.rectangle(depth_colored, (depth_x1, depth_y1), (depth_x2, depth_y2), (0, 255, 0), 3)
+            cv2.circle(depth_colored, (depth_center_x, depth_center_y), 8, (255, 255, 255), -1)
+
+            # Add text
+            text_depth = f"Depth Center: ({depth_center_x}, {depth_center_y}) = {depth:.3f}m"
+            cv2.putText(depth_colored, text_depth, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            text_shift = f"Shift: {horizontal_shift}px right"
+            cv2.putText(depth_colored, text_shift, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            text_3d = f"3D: x={x_3d:.3f}m, z={z_3d:.3f}m"
+            cv2.putText(depth_colored, text_3d, (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            text_legend = "RED=RGB position, GREEN=Shifted depth sampling"
+            cv2.putText(depth_colored, text_legend, (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+
+            # Create named windows and display
+            cv2.namedWindow('1. Gemini Input', cv2.WINDOW_NORMAL)
+            cv2.namedWindow('2. RGB with BBox', cv2.WINDOW_NORMAL)
+            cv2.namedWindow('3. Depth with BBox', cv2.WINDOW_NORMAL)
+
+            cv2.imshow('1. Gemini Input', gemini_bgr)
+            cv2.imshow('2. RGB with BBox', rgb_with_bbox)
+            cv2.imshow('3. Depth with BBox', depth_colored)
+
+            self.get_logger().info('=== DEBUG WINDOWS DISPLAYED ===')
+            self.get_logger().info('Press any key on one of the windows to continue...')
+            cv2.waitKey(0)  # Wait indefinitely for key press
+            cv2.destroyAllWindows()
+            cv2.waitKey(1)  # Small delay to ensure windows close properly
             # === END VISUALIZATION ===
 
             return (x_3d, y_3d, z_3d)
