@@ -27,8 +27,7 @@ def generate_launch_description():
     
     # Configuration files
     sim_params_file = os.path.join(pkg_path, 'config', 'sim_params.yaml')
-    nav2_params_file = os.path.join(pkg_path, 'config', 'nav2_params.yaml')
-    turtlebot3_params_file = os.path.join(pkg_path, 'config', 'turtlebot3_use_sim_time.yaml')
+    nav2_params_file = os.path.join(pkg_path, 'config', 'nav2_params_sim.yaml')
     
     # Load simulation parameters
     sim_params = load_yaml_params(sim_params_file)['/**']['ros__parameters']
@@ -103,7 +102,7 @@ def generate_launch_description():
         launch_arguments={
             'use_sim_time': use_sim_time_config,
             'autostart': autostart_config,
-            'params_file': turtlebot3_params_file,
+            'params_file': nav2_params_file,
             'map_subscribe_transient_local': 'true'
         }.items()
     )

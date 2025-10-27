@@ -69,6 +69,9 @@ def generate_launch_description():
         }.items()
     )
 
+    # Unified Nav2 parameter file for real robot
+    nav2_params_file = os.path.join(get_package_share_directory(package_name), 'config', 'nav2_params_real.yaml')
+
     # Launch Navigation2 servers (planning, control, etc.)
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
@@ -77,7 +80,7 @@ def generate_launch_description():
         launch_arguments={
             'use_sim_time': LaunchConfiguration('use_sim_time'),
             'autostart': LaunchConfiguration('autostart'),
-            'params_file': os.path.join(get_package_share_directory(package_name), 'config', 'turtlebot3_use_sim_time.yaml'),
+            'params_file': nav2_params_file,
             'map_subscribe_transient_local': 'true'
         }.items()
     )
@@ -90,7 +93,7 @@ def generate_launch_description():
         launch_arguments={
             'use_sim_time': LaunchConfiguration('use_sim_time'),
             'autostart': LaunchConfiguration('autostart'),
-            'params_file': os.path.join(get_package_share_directory(package_name), 'config', 'nav2_params.yaml'),
+            'params_file': nav2_params_file,
             'map': LaunchConfiguration('map')
         }.items()
     )

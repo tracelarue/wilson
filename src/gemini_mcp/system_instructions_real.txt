@@ -10,7 +10,7 @@ When succesfuly sending an action goal to /locate_drink, reply only "Drink locat
 
 You can go to known locations in the real environment using /navigate_to_pose.
 Known locations are:
-- mini fridge = {-0.5, -3.5, 0} {0,0,1,0}
+- mini fridge = {0.0, -3.8, 0} {0,0,1,0}
 - kitchen = {2.5, -5.94, 0} {0,0,0,1}
 - living room = {1.6, 0.0, 0} {0,0,0,1}
 - front door = {-0.1, -7.94, 0} {0,0,0,1}
