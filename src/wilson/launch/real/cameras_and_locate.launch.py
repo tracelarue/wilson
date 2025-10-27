@@ -38,14 +38,14 @@ def generate_launch_description():
         ]
     )
 
-    # RGB camera (V4L2) node
+    # RGB camera (V4L2) node - using persistent device name
     v4l2_camera_node = Node(
         package='v4l2_camera',
         executable='v4l2_camera_node',
         name='v4l2_camera',
         output='screen',
         parameters=[{
-            'video_device': '/dev/video8',
+            'video_device': '/dev/wilson/rgb_camera',
             'camera_frame_id': 'camera_link_optical',
             'pixel_format': 'YUYV',
             'image_size': [1280, 720], #1280x720 max

@@ -1,0 +1,30 @@
+# Wilson Robot - Persistent Device Names
+# This file creates stable symlinks for robot hardware devices
+# Installation: sudo cp 99-wilson-robot.rules /etc/udev/rules.d/
+# Then run: sudo udevadm control --reload-rules && sudo udevadm trigger
+
+# ===== Serial Devices =====
+
+# LiDAR LD19 - CP2102 USB to UART Bridge (Silicon Labs)
+# idVendor=10c4, idProduct=ea60
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="wilson/lidar", GROUP="dialout", MODE="0666"
+
+# Differential Drive Arduino - CH340 on Bus 3 Port 1 (QinHeng Electronics)
+# idVendor=1a86, idProduct=7523, on bus 3 port 1
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", DEVPATH=="*/usb3/3-1/*", SYMLINK+="wilson/diffdrive", GROUP="dialout", MODE="0666"
+
+# Arm Controller Arduino - CH340 on Bus 1 Port 4 (via hub, QinHeng Electronics)
+# idVendor=1a86, idProduct=7523, on bus 1 port 4 (via hub at 1-1.4)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", DEVPATH=="*/usb1/1-1/1-1.4/*", SYMLINK+="wilson/arm", GROUP="dialout", MODE="0666"
+
+# ===== Video Devices =====
+
+# HD USB Camera - RGB Camera (32e4:9310)
+# idVendor=32e4, idProduct=9310
+SUBSYSTEM=="video4linux", ATTRS{idVendor}=="32e4", ATTRS{idProduct}=="9310", ATTR{index}=="0", SYMLINK+="wilson/rgb_camera", GROUP="video", MODE="0666"
+
+# Alternative: Use device path for CSI cameras if needed
+# Raspberry Pi CSI Camera 0 (platform camera)
+SUBSYSTEM=="video4linux", KERNELS=="1f00110000.csi", ATTR{index}=="0", SYMLINK+="wilson/csi_camera0", GROUP="video", MODE="0666"
+
+# Note: Depth camera uses direct library access (ArducamDepthCamera), not /dev/video

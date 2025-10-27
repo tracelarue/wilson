@@ -2,12 +2,12 @@ locate_drink_action_server:
   ros__parameters:
     # Target position parameters (relative to depth_camera_link_optical frame)
     target_x: 0.0        # Target horizontal position (meters) - centered in camera view
-    target_z: 0.41        # Target distance from camera (meters)
+    target_z: 0.38       # Target distance from camera (meters)
     position_tolerance: 0.03  # Position tolerance (meters) - success when within this range
 
     # Control parameters (proportional control gains)
-    k_linear: 1.0        # Linear velocity gain (higher = faster forward/backward movement)
-    k_angular: 1.0    # Angular velocity gain (higher = faster rotation)
+    k_linear: 2        # Linear velocity gain (higher = faster forward/backward movement)
+    k_angular: 2    # Angular velocity gain (higher = faster rotation)
     max_linear_vel: 0.5  # Maximum linear velocity (m/s)
     max_angular_vel: 0.5 # Maximum angular velocity (rad/s)
     min_movement_threshold: 0.005  # Minimum velocity to prevent oscillations

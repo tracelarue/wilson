@@ -99,9 +99,19 @@ class DepthFieldNode(Node):
         if self.cfg_path is not None:
             ret = self.cam.openWithFile(self.cfg_path, 0)
         else:
-            ret = self.cam.open(ac.Connection.CSI, 0)
+            # Try all CSI ports (0, 1, 2) until one works
+            ret = -1
+            for csi_port in [0, 1, 2]:
+                self.get_logger().info(f"Attempting to open depth camera on CSI port {csi_port}...")
+                ret = self.cam.open(ac.Connection.CSI, csi_port)
+                if ret == 0:
+                    self.get_logger().info(f"Successfully opened depth camera on CSI port {csi_port}")
+                    break
+                else:
+                    self.get_logger().warn(f"Failed to open CSI port {csi_port}, trying next port...")
+
         if ret != 0:
-            self.get_logger().error(f"Failed to open camera. Error code: {ret}")
+            self.get_logger().error(f"Failed to open camera on any CSI port. Last error code: {ret}")
             return
         ret = self.cam.start(ac.FrameType.DEPTH)
         if ret != 0:
@@ -138,8 +148,8 @@ class DepthFieldNode(Node):
             x_end = x_start + self.crop_width
             depth_buf = depth_buf[y_start:y_end, x_start:x_end]
             confidence_buf = confidence_buf[y_start:y_end, x_start:x_end]
-            # Publish depth field as Image
-            depth_img_msg = self.bridge.cv2_to_imgmsg(depth_buf.astype(np.float32), encoding='32FC1')
+            # Publish depth field as Image (convert from mm to meters)
+            depth_img_msg = self.bridge.cv2_to_imgmsg((depth_buf / 1000.0).astype(np.float32), encoding='32FC1')
             self.publisher_.publish(depth_img_msg)
 
             # Create and publish RGB depth visualization

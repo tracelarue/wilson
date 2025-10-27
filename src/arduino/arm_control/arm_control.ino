@@ -110,8 +110,10 @@ void processCommand(String command) {
       setServoPosition(elbowServo, angle); 
       currentElbow = angle;
       break;
-    case 'w': 
-      setServoPosition(wristServo, angle); 
+    case 'w':
+      angle = angle+10; // Wrist offset
+      if (angle > MAX_USER_ANGLE) angle = MAX_USER_ANGLE;
+      setServoPosition(wristServo, angle);
       currentWrist = angle;
       break;
     case 'g': 

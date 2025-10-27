@@ -108,32 +108,47 @@ def generate_launch_description():
         PythonLaunchDescriptionSource([os.path.join(get_package_share_directory('ldlidar_stl_ros2'),'launch','ld19.launch.py')])
     )
 
+    # Depth camera (Arducam ToF) node
     depth_field = Node(
         package='depth_cam',
         executable='depth_field',
         name='depth_field',
         output='screen',
-        # No arguments to avoid issues with argument parsing
         parameters=[{
             'frame_id': 'depth_camera_link_optical'
-        }]
+        }],
+        remappings=[
+            ('/depth_field', '/depth_camera/depth/image_raw')
+        ]
     )
-    
 
+    # RGB camera (V4L2) node - using persistent device name
     v4l2_camera_node = Node(
         package='v4l2_camera',
         executable='v4l2_camera_node',
         name='v4l2_camera',
         output='screen',
         parameters=[{
-            'video_device': '/dev/video8',          # Adjust as needed
+            'video_device': '/dev/wilson/rgb_camera',
             'camera_frame_id': 'camera_link_optical',
-            'pixel_format': 'YUYV',                 # Common format
-            'image_size': [1080, 1080],               # Adjust as needed
+            'pixel_format': 'YUYV',
+            'image_size': [1280, 720], #1280x720 max
             'framerate': 30.0,
-        }]
+        }],
+        remappings=[
+            ('/image_raw', '/rgb_camera/image_raw')
+        ]
     )
 
+    delayed_v4l2_camera_node = TimerAction(
+        period=4.0, 
+        actions=[v4l2_camera_node],
+    )
+
+    delayed_depth_field = TimerAction(
+        period=4.0, 
+        actions=[depth_field],
+    )
 
 
     # Launch them all!
@@ -147,7 +162,7 @@ def generate_launch_description():
         delayed_jointstate_broadcaster_spawner,
         twist_mux,
         ld19_launch,
-        depth_field,
-        v4l2_camera_node,
+        delayed_depth_field,
+        delayed_v4l2_camera_node,
 
     ])
