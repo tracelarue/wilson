@@ -17,7 +17,6 @@ from google import genai
 from google.genai import types
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from scipy import signal
 
 if sys.version_info < (3, 11, 0):
     import exceptiongroup
@@ -31,7 +30,10 @@ AUDIO_FORMAT = pyaudio.paInt16
 AUDIO_CHANNELS = 1
 SEND_SAMPLE_RATE = 16000
 RECEIVE_SAMPLE_RATE = 24000
-CHUNK_SIZE = 11520
+# Reduced chunk size for lower latency (was 11520)
+# 512 samples = 32ms at 16kHz, good balance of latency and efficiency
+CHUNK_SIZE = 512
+OUTPUT_CHUNK_SIZE = 768  # 32ms at 24kHz
 
 # Gemini Live model and default settings
 MODEL = "models/gemini-2.5-flash-live-preview"
@@ -42,29 +44,55 @@ DEFAULT_RESPONSE_MODALITY = "AUDIO"  # Options: "TEXT", "AUDIO"
 # See system_instructions_sim.txt and system_instructions_real.txt
 
 
+# Simple buffer pool to reduce memory allocations
+class BufferPool:
+    """Simple object pool for numpy arrays to reduce garbage collection pressure"""
+
+    def __init__(self, buffer_size, max_buffers=20):
+        self.buffer_size = buffer_size
+        self.max_buffers = max_buffers
+        self._pool = []
+
+    def get(self):
+        """Get a buffer from the pool or create a new one"""
+        if self._pool:
+            return self._pool.pop()
+        return np.empty(self.buffer_size, dtype=np.int16)
+
+    def put(self, buffer):
+        """Return a buffer to the pool"""
+        if len(self._pool) < self.max_buffers:
+            self._pool.append(buffer)
+
+
 # Audio resampling functions
 def resample_audio(audio_data, original_rate, target_rate):
-    """Resample audio data from original_rate to target_rate"""
+    """Resample audio data from original_rate to target_rate using fast linear interpolation"""
     if original_rate == target_rate:
         return audio_data
-    else:
-        # Convert bytes to numpy array
-        audio_array = np.frombuffer(audio_data, dtype=np.int16)
 
-        # Calculate resampling ratio
-        ratio = target_rate / original_rate
+    # Convert bytes to numpy array
+    audio_array = np.frombuffer(audio_data, dtype=np.int16)
 
-        # Calculate new length
-        new_length = int(len(audio_array) * ratio)
+    # Calculate resampling ratio
+    ratio = target_rate / original_rate
 
-        # Resample the audio
-        resampled = signal.resample(audio_array, new_length)
+    # Calculate new length
+    new_length = int(len(audio_array) * ratio)
 
-        # Convert back to int16
-        resampled = resampled.astype(np.int16)
+    # Fast linear interpolation instead of FFT-based resampling
+    # Create indices for the new sample positions
+    old_indices = np.arange(len(audio_array))
+    new_indices = np.linspace(0, len(audio_array) - 1, new_length)
 
-        # Convert back to bytes
-        return resampled.tobytes()
+    # Use numpy's interp for fast linear interpolation
+    resampled = np.interp(new_indices, old_indices, audio_array)
+
+    # Convert back to int16
+    resampled = resampled.astype(np.int16)
+
+    # Convert back to bytes
+    return resampled.tobytes()
 
 
 # Load MCP server configuration from mcp_config.json
@@ -290,10 +318,10 @@ class AudioLoop:
 
         # Audio format constants
         self.format = pyaudio.paInt16
-        self.chunk_size = 11520
-        self.received_audio_buffer = 11520
-        self.api_sample_rate = 16000  # Gemini API input rate
-        self.api_output_sample_rate = 24000  # Gemini API output rate
+        self.chunk_size = CHUNK_SIZE
+        self.received_audio_buffer = OUTPUT_CHUNK_SIZE
+        self.api_sample_rate = SEND_SAMPLE_RATE  # Gemini API input rate
+        self.api_output_sample_rate = RECEIVE_SAMPLE_RATE  # Gemini API output rate
 
         # Mode-specific audio configuration
         if self.mode == "sim":
@@ -329,6 +357,16 @@ class AudioLoop:
         # Control flags for audio management
         self.mic_active = True
         self.mic_lock = asyncio.Lock()
+
+        # Audio streaming state tracking
+        self.audio_stream_active = False
+        self.audio_stream_lock = asyncio.Lock()
+        self.last_audio_chunk_time = None
+
+        # Buffer pool for resampling (reduces memory allocations)
+        # Calculate max buffer size needed for resampling
+        max_input_samples = max(self.chunk_size, self.received_audio_buffer) * 2
+        self.buffer_pool = BufferPool(buffer_size=max_input_samples)
 
     async def send_text(self):
         """
@@ -418,9 +456,9 @@ class AudioLoop:
                         return
 
                     # For other messages, show them concisely (suppress excessive feedback spam)
-                    # Only show every 10th feedback to avoid spam
+                    # Only show every 100th feedback to avoid spam
                     if "feedback #" in message.lower():
-                        if progress % 50 == 0:  # Show every 50th feedback
+                        if progress % 100 == 0:  # Show every 100th feedback
                             print(f"   Progress update #{int(progress)}")
                         return
 
@@ -529,15 +567,24 @@ class AudioLoop:
         # Run in thread to prevent blocking audio pipeline
         cap = await asyncio.to_thread(cv2.VideoCapture, 0)
 
+        # Set lower resolution for faster capture and less bandwidth
+        await asyncio.to_thread(cap.set, cv2.CAP_PROP_FRAME_WIDTH, 640)
+        await asyncio.to_thread(cap.set, cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
         while True:
             # Capture frame in separate thread
             frame = await asyncio.to_thread(self._get_frame, cap)
             if frame is None:
                 break
 
+            # Try to add frame without blocking if queue is full (skip frame)
+            try:
+                self.out_queue.put_nowait(frame)
+            except asyncio.QueueFull:
+                pass  # Skip this frame if queue is full
+
             # Send frame at 1 second intervals
             await asyncio.sleep(1.0)
-            await self.out_queue.put(frame)
 
         # Clean up camera resource
         cap.release()
@@ -582,9 +629,14 @@ class AudioLoop:
             if frame is None:
                 break
 
+            # Try to add frame without blocking if queue is full (skip frame)
+            try:
+                self.out_queue.put_nowait(frame)
+            except asyncio.QueueFull:
+                pass  # Skip this frame if queue is full
+
             # Send screenshot at 1 second intervals
             await asyncio.sleep(1.0)
-            await self.out_queue.put(frame)
 
     async def send_realtime(self):
         """
@@ -638,9 +690,7 @@ class AudioLoop:
                     await asyncio.to_thread(self.audio_stream.start_stream)
                     stream_active = True
 
-                # Small sleep to prevent CPU overuse
-                await asyncio.sleep(0.01)
-                # Read audio data
+                # Read audio data (blocking call, no need for sleep)
                 audio_data = await asyncio.to_thread(
                     self.audio_stream.read, self.chunk_size, **overflow_kwargs
                 )
@@ -670,6 +720,7 @@ class AudioLoop:
             turn = self.session.receive()
             turn_text = ""
             first_text = True
+            has_audio_in_turn = False
 
             async for response in turn:
                 # Handle server content with model turn
@@ -678,6 +729,11 @@ class AudioLoop:
                     for part in server_content.model_turn.parts:
                         # Handle audio data from inline_data parts
                         if part.inline_data:
+                            # Signal that audio streaming has started
+                            if not has_audio_in_turn:
+                                async with self.audio_stream_lock:
+                                    self.audio_stream_active = True
+                                has_audio_in_turn = True
                             self.audio_in_queue.put_nowait(part.inline_data.data)
 
                         # Handle text responses
@@ -713,6 +769,10 @@ class AudioLoop:
                 if tool_call is not None:
                     await self.handle_tool_call(tool_call)
 
+            # Turn is complete - signal end of audio stream
+            async with self.audio_stream_lock:
+                self.audio_stream_active = False
+
             # Complete the response display
             if turn_text:
                 print()  # Add newline after response
@@ -743,28 +803,32 @@ class AudioLoop:
         )
 
         audio_playing = False
-        last_audio_time = asyncio.get_event_loop().time()
 
         # Continuously play audio from queue
         while True:
             try:
-                # Add a timeout to detect stalled audio
+                # Wait for audio with a reasonable timeout
                 try:
-                    audio_bytes = await asyncio.wait_for(self.audio_in_queue.get(), timeout=5.0)
-                    last_audio_time = asyncio.get_event_loop().time()
+                    audio_bytes = await asyncio.wait_for(self.audio_in_queue.get(), timeout=1.0)
                 except asyncio.TimeoutError:
-                    # No audio for 5 seconds, check if we need to ensure mic is unmuted
-                    current_time = asyncio.get_event_loop().time()
-                    if audio_playing and (current_time - last_audio_time) > 3.0:
-                        print("⚠️ Audio timeout detected - resetting microphone state")
-                        if self.active_muting:
-                            async with self.mic_lock:
-                                self.mic_active = True
+                    # Check if we were playing audio and the stream is now complete
+                    if audio_playing:
+                        async with self.audio_stream_lock:
+                            stream_still_active = self.audio_stream_active
+
+                        # If stream is complete and queue is empty, we're done
+                        if not stream_still_active and self.audio_in_queue.empty():
+                            if self.active_muting:
+                                async with self.mic_lock:
+                                    self.mic_active = True
+                                    audio_playing = False
+                                    print("🎤 Microphone unmuted - audio playback complete")
+                            else:
                                 audio_playing = False
-                                print("🎤 Microphone re-enabled after audio timeout")
-                        else:
-                            audio_playing = False
                     continue
+
+                # Update last audio time
+                self.last_audio_chunk_time = asyncio.get_event_loop().time()
 
                 # If this is the first audio chunk in a sequence, mute the microphone (if enabled)
                 if not audio_playing:
@@ -774,8 +838,8 @@ class AudioLoop:
                             audio_playing = True
                             print("🔇 Microphone muted while audio is playing")
 
-                        # Add a delay to ensure the mic is fully muted before audio starts
-                        await asyncio.sleep(0.25)
+                        # Small delay to ensure mic is fully muted
+                        await asyncio.sleep(0.1)
                     else:
                         audio_playing = True
 
@@ -785,21 +849,6 @@ class AudioLoop:
 
                 # Play the audio
                 await asyncio.to_thread(audio_stream.write, audio_bytes)
-
-                # Check if the queue is empty (reached end of audio)
-                if self.audio_in_queue.qsize() == 0:
-                    # Wait briefly to make sure no more chunks are coming
-                    await asyncio.sleep(2)
-                    if self.audio_in_queue.qsize() == 0:
-                        # No more audio chunks, re-enable microphone (if it was muted)
-                        if self.active_muting:
-                            async with self.mic_lock:
-                                if not self.mic_active:
-                                    self.mic_active = True
-                                    audio_playing = False
-                                    print("🎤 Microphone unmuted after audio playback")
-                        else:
-                            audio_playing = False
 
             except Exception as e:
                 print(f"🔴 Audio playback error: {str(e)}")
@@ -939,8 +988,8 @@ class AudioLoop:
                         self.session = session
 
                         # Initialize communication queues
-                        self.audio_in_queue = asyncio.Queue()  # Audio from Gemini
-                        self.out_queue = asyncio.Queue(maxsize=5)  # Data to Gemini (limited size)
+                        self.audio_in_queue = asyncio.Queue(maxsize=50)  # Audio from Gemini (buffer for smooth playback)
+                        self.out_queue = asyncio.Queue(maxsize=3)  # Data to Gemini (small buffer for low latency)
 
                         # Start all async tasks
                         send_text_task = task_group.create_task(self.send_text())
