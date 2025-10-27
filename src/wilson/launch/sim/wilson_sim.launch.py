@@ -164,7 +164,19 @@ def generate_launch_description():
         parameters=[locate_drink_params_file],
     )
 
-    
+    # Move To State Action Server Node
+    move_to_state_server_node = Node(
+        package="move_to_state_action",
+        executable="move_to_state_action_server",
+        name="move_to_state_action_server",
+        output="screen",
+        parameters=[
+            moveit_config.robot_description,
+            moveit_config.robot_description_semantic,
+            moveit_config.robot_description_kinematics,
+            {'use_sim_time': True},
+        ],
+    )
 
     # Timed launches to ensure proper startup sequence
     nav2_timer = TimerAction(
@@ -185,7 +197,7 @@ def generate_launch_description():
     # Action servers timer - start after move_group
     action_servers_timer = TimerAction(
         period=10.0,
-        actions=[grab_drink_server_node, locate_drink_server_node]
+        actions=[grab_drink_server_node, locate_drink_server_node, move_to_state_server_node]
     )
 
     # Teleop keyboard in separate terminal

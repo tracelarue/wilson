@@ -2,15 +2,16 @@ locate_drink_action_server:
   ros__parameters:
     # Target position parameters (relative to depth_camera_link_optical frame)
     target_x: 0.0        # Target horizontal position (meters) - centered in camera view
-    target_z: 0.38       # Target distance from camera (meters)
-    position_tolerance: 0.03  # Position tolerance (meters) - success when within this range
+    target_z: 0.375       # Target distance from camera (meters)
+    x_tolerance: 0.015    # Horizontal tolerance (meters) - success when |error_x| < x_tolerance
+    z_tolerance: 0.02    # Distance tolerance (meters) - success when |error_z| < z_tolerance
 
     # Control parameters (proportional control gains)
-    k_linear: 2        # Linear velocity gain (higher = faster forward/backward movement)
-    k_angular: 2    # Angular velocity gain (higher = faster rotation)
+    k_linear: 2.0      # Linear velocity gain (higher = faster forward/backward movement)
+    k_angular: 5.0   # Angular velocity gain (higher = faster rotation)
     max_linear_vel: 0.5  # Maximum linear velocity (m/s)
     max_angular_vel: 0.5 # Maximum angular velocity (rad/s)
-    min_movement_threshold: 0.005  # Minimum velocity to prevent oscillations
+    min_movement_threshold: 0.001  # Minimum velocity to prevent oscillations
 
     # Camera parameters - REAL ROBOT (Arducam ToF)
     # NOTE: These are estimated defaults - tune after testing on real hardware
@@ -21,6 +22,10 @@ locate_drink_action_server:
     image_height: 720    # Image height in pixels (HQVGA mode)
     depth_sample_size: 5 # Number of pixels (NxN window) to average for depth calculation
     bbox_shift_ratio: 0.2 # Horizontal shift for depth sampling as ratio of bbox height (compensates for RGB/depth camera offset)
+
+    # Y-value override (for debugging/testing)
+    override_y_value: true   # Enable to force Y value to fixed_y_value (disables calculated Y from depth camera)
+    fixed_y_value: 0.1       # Fixed Y value (meters) when override_y_value is true
 
     # Operation parameters
     max_detection_attempts: 5   # Maximum number of detection attempts before failure

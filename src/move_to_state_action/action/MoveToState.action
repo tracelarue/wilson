@@ -1,0 +1,12 @@
+# Goal: Move robot group to a named state defined in SRDF
+# Field names have no underscores for MCP server compatibility
+string statename    # Name of the state (e.g., "ready", "zero", "open", "can")
+---
+# Result: Success or failure of the move operation
+bool success
+string message
+---
+# Feedback: Progress during planning and execution
+# Field names have no underscores for MCP server compatibility
+string currentstatus         # Current operation status
+float32 progresspercentage   # Progress from 0.0 to 100.0

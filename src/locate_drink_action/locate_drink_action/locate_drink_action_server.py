@@ -146,7 +146,8 @@ class LocateDrinkActionServer(Node):
         # Target position parameters
         self.declare_parameter('target_x', 0.0)
         self.declare_parameter('target_z', 0.65)
-        self.declare_parameter('position_tolerance', 0.05)
+        self.declare_parameter('x_tolerance', 0.05)  # Horizontal tolerance
+        self.declare_parameter('z_tolerance', 0.05)  # Distance tolerance
 
         # Control parameters
         self.declare_parameter('k_linear', 0.3)
@@ -164,6 +165,10 @@ class LocateDrinkActionServer(Node):
         self.declare_parameter('depth_sample_size', 5)  # NxN window for depth averaging
         self.declare_parameter('bbox_shift_ratio', 0.0)  # Horizontal shift ratio for depth sampling
 
+        # Y-value override parameters
+        self.declare_parameter('override_y_value', False)  # Enable/disable Y-value override
+        self.declare_parameter('fixed_y_value', 0.1)  # Fixed Y value in meters when override is enabled
+
         # Operation parameters
         self.declare_parameter('max_detection_attempts', 5)
         self.declare_parameter('control_loop_rate', 2.0)  # Hz
@@ -176,7 +181,8 @@ class LocateDrinkActionServer(Node):
         # Target position
         self.target_x = self.get_parameter('target_x').value
         self.target_z = self.get_parameter('target_z').value
-        self.position_tolerance = self.get_parameter('position_tolerance').value
+        self.x_tolerance = self.get_parameter('x_tolerance').value
+        self.z_tolerance = self.get_parameter('z_tolerance').value
 
         # Control gains
         self.k_linear = self.get_parameter('k_linear').value
@@ -194,6 +200,10 @@ class LocateDrinkActionServer(Node):
         self.depth_sample_size = self.get_parameter('depth_sample_size').value
         self.bbox_shift_ratio = self.get_parameter('bbox_shift_ratio').value
         self.v_fov = self.h_fov / self.aspect_ratio
+
+        # Y-value override parameters
+        self.override_y_value = self.get_parameter('override_y_value').value
+        self.fixed_y_value = self.get_parameter('fixed_y_value').value
 
         # Operation parameters
         self.max_detection_attempts = self.get_parameter('max_detection_attempts').value
@@ -317,8 +327,8 @@ class LocateDrinkActionServer(Node):
                 # Publish RViz marker with adjusted z position
                 self._publish_marker(current_x, current_y, current_z_adjusted, goal_handle.request.drinkname)
 
-                # Check if within tolerance
-                if abs(error_x) < self.position_tolerance and abs(error_z) < self.position_tolerance:
+                # Check if within tolerance (separate tolerances for X and Z)
+                if abs(error_x) < self.x_tolerance and abs(error_z) < self.z_tolerance:
                     result.success = True
                     result.message = f'Successfully positioned relative to {goal_handle.request.drinkname}'
                     result.final_position = Point(x=current_x, y=current_y, z=current_z_adjusted)
@@ -577,6 +587,12 @@ class LocateDrinkActionServer(Node):
             # This ensures the 3D calculation uses the correct FOV math based on RGB image dimensions
             # The depth value comes from the scaled coordinates, but the angle calculation needs RGB space
             x_3d, y_3d, z_3d = self._calculate_3d_position(depth_center_x, depth_center_y, depth)
+
+            # Apply Y-value override if enabled (for debugging/calibration)
+            if self.override_y_value:
+                y_3d_original = y_3d
+                y_3d = self.fixed_y_value
+                self.get_logger().info(f'Y-value override: {y_3d_original:.3f}m -> {y_3d:.3f}m (fixed)')
 
             # === VISUALIZATION DEBUG ===
             # Visualization disabled for production use

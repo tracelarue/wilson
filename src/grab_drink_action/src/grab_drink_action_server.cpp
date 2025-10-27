@@ -239,9 +239,9 @@ private:
             // Normalize the vector (ignore Z component for planar approach)
             double length = std::sqrt(dx*dx + dy*dy + dz*dz);
             if (length > 1e-6) {
-                approach_vec.vector.x = dx / length;
-                approach_vec.vector.y = dy / length;
-                approach_vec.vector.z = 0.0;
+                approach_vec.vector.x = 0.0; //dx / length; // Re-enable for dynamic x approach
+                approach_vec.vector.y = 0.0; //dy / length; // Re-enable for dynamic x approach
+                approach_vec.vector.z = -1.0;
             } else {
                 RCLCPP_WARN(LOGGER, "Base link and drink are at same position, using default X direction");
                 approach_vec.vector.x = 1.0;
@@ -348,7 +348,7 @@ private:
         auto cartesian_planner = std::make_shared<mtc::solvers::CartesianPath>();
         cartesian_planner->setMaxVelocityScalingFactor(1.0);
         cartesian_planner->setMaxAccelerationScalingFactor(1.0);
-        cartesian_planner->setStepSize(.001);
+        cartesian_planner->setStepSize(.005);
 
         // Stages
         mtc::Stage* current_state_ptr = nullptr;
@@ -358,6 +358,22 @@ private:
             auto stage_state_current = std::make_unique<mtc::stages::CurrentState>("current");
             current_state_ptr = stage_state_current.get();
             task.add(std::move(stage_state_current));
+        }
+
+        // Go to transition to grab
+        {
+            auto stage_transition_to_grab = std::make_unique<mtc::stages::MoveTo>("Transition to grab", sampling_planner);
+            stage_transition_to_grab->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
+            stage_transition_to_grab->setGoal("transition_to_grab");
+            task.add(std::move(stage_transition_to_grab));
+        }
+
+        // Go to Ready to grab
+        {
+            auto stage_ready_to_grab = std::make_unique<mtc::stages::MoveTo>("Ready to grab", sampling_planner);
+            stage_ready_to_grab->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
+            stage_ready_to_grab->setGoal("ready_to_grab");
+            task.add(std::move(stage_ready_to_grab));
         }
 
         // Open Hand
@@ -392,7 +408,7 @@ private:
                 stage->properties().set("marker_ns", "approach_drink");
                 stage->properties().set("link", hand_frame);
                 stage->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
-                stage->setMinMaxDistance(0.01, 0.03);
+                stage->setMinMaxDistance(0.0, 0.1);
 
                 // Compute approach direction dynamically
                 geometry_msgs::msg::Vector3Stamped vec = computeApproachVector(drink_position);

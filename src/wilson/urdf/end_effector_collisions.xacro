@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" >
 
-    <xacro:property name="end_effector_offset_x" value="0.06"/>
+    <xacro:property name="end_effector_offset_x" value="0.045"/>
     <xacro:property name="green" value="0.2 0.8 0.2 1.0"/>
 
     <!-- End effector frame (for convenience in motion planning) -->

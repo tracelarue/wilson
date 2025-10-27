@@ -144,10 +144,24 @@ def generate_launch_description():
         ],
     )
 
+    # Move To State Action Server node
+    move_to_state_server_node = Node(
+        package='move_to_state_action',
+        executable='move_to_state_action_server',
+        name='move_to_state_action_server',
+        output='screen',
+        parameters=[
+            moveit_config.robot_description,
+            moveit_config.robot_description_semantic,
+            moveit_config.robot_description_kinematics,
+            {'use_sim_time': False},
+        ],
+    )
+
     # Timer for action servers - start after move_group is ready
     action_servers_timer = TimerAction(
         period=13.0,
-        actions=[locate_drink_server_node, grab_drink_server_node]
+        actions=[locate_drink_server_node, grab_drink_server_node, move_to_state_server_node]
     )
 
     # Add timer to start navigation after Gazebo is ready

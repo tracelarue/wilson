@@ -140,7 +140,8 @@ All parameters are configurable via [config/locate_drink_params.yaml](config/loc
 ### Target Position Parameters
 - `target_x` (default: 0.0): Target horizontal position in meters (centered in camera view)
 - `target_z` (default: 0.4): Target distance from camera in meters
-- `position_tolerance` (default: 0.03): Tolerance in meters for successful positioning
+- `x_tolerance` (default: 0.05): Horizontal tolerance in meters for successful positioning
+- `z_tolerance` (default: 0.05): Distance tolerance in meters for successful positioning
 
 ### Control Parameters
 - `k_linear` (default: 0.5): Linear velocity proportional gain
@@ -155,6 +156,14 @@ All parameters are configurable via [config/locate_drink_params.yaml](config/loc
 - `camera_frame` (default: 'depth_camera_link_optical'): TF frame for camera
 - `image_width` (default: 640): Image width in pixels
 - `image_height` (default: 480): Image height in pixels
+- `depth_sample_size` (default: 5): NxN window size for depth averaging
+- `bbox_shift_ratio` (default: 0.0): Horizontal shift ratio for depth sampling (compensates for RGB/depth camera offset)
+
+### Y-Value Override Parameters (Debugging/Calibration)
+- `override_y_value` (default: false): Enable to force Y-coordinate to a fixed value instead of using calculated value from depth camera
+- `fixed_y_value` (default: 0.1): Fixed Y value in meters when `override_y_value` is enabled
+
+**Note:** The Y-value override is useful for debugging vertical positioning issues or when the depth camera's vertical calibration is inaccurate. When enabled, the returned Y-coordinate will always be the `fixed_y_value` regardless of the detected drink's actual vertical position. This is applied at the last moment before returning the 3D position. Set `override_y_value: false` to disable and use the calculated Y-coordinate.
 
 ### Operation Parameters
 - `max_detection_attempts` (default: 5): Maximum detection retries before failure
@@ -190,7 +199,7 @@ uint8 detection_attempts           # Number of detection attempts made
 
 The action server operates in the `depth_camera_link_optical` frame:
 - **X-axis**: Horizontal (positive = right from camera's view)
-- **Y-axis**: Vertical (positive = down from camera's view) - *not controlled*
+- **Y-axis**: Vertical (positive = down from camera's view) - *not controlled by robot movement*
 - **Z-axis**: Depth/distance from camera (positive = forward)
 
 **Target Position** (configurable):
@@ -198,6 +207,14 @@ The action server operates in the `depth_camera_link_optical` frame:
 - `z = 0.4`: Drink is 0.4 meters from the camera
 
 The robot moves via differential drive (`/cmd_vel`) to minimize the error between the current and target positions.
+
+**Y-Value Override:**
+The Y-coordinate can be manually overridden for debugging/calibration purposes. When `override_y_value: true` in the config, the returned Y-coordinate will always be `fixed_y_value` instead of the calculated value. This is useful when:
+- Testing vertical positioning without a properly calibrated depth camera
+- Debugging issues with vertical coordinate calculations
+- The depth camera's vertical FOV or alignment is inaccurate
+
+To disable the override and use the actual calculated Y-coordinate, set `override_y_value: false` in your config file.
 
 ## Topics
 
@@ -227,7 +244,7 @@ The robot moves via differential drive (`/cmd_vel`) to minimize the error betwee
    - Linear velocity: `v = k_linear * error_z` (move forward/back)
    - Angular velocity: `ω = -k_angular * error_x` (rotate left/right)
 4. **Send Commands**: Publish to `/cmd_vel` with velocity limits
-5. **Check Convergence**: Success if `|error_x| < tolerance` AND `|error_z| < tolerance`
+5. **Check Convergence**: Success if `|error_x| < x_tolerance` AND `|error_z| < z_tolerance`
 6. **Repeat**: Continue until converged or timeout
 
 ## Error Handling
@@ -252,7 +269,8 @@ The action server handles various failure scenarios:
 1. **Faster Convergence**: Increase `k_linear` and `k_angular` gains
 2. **Smoother Motion**: Decrease gains, reduce `max_linear_vel` and `max_angular_vel`
 3. **Reduce Oscillations**: Increase `min_movement_threshold`
-4. **Tighter Tolerance**: Decrease `position_tolerance` (requires more precise control)
+4. **Tighter Tolerance**: Decrease `x_tolerance` and/or `z_tolerance` (requires more precise control)
+5. **Independent Tuning**: Adjust `x_tolerance` and `z_tolerance` separately to optimize horizontal vs distance positioning
 
 ### Reducing API Costs
 1. Decrease `control_loop_rate` (fewer API calls per second)
