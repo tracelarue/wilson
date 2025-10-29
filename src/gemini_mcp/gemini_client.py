@@ -394,7 +394,6 @@ class AudioLoop:
         Args:
             tool_call: Tool call request from Gemini containing function calls
         """
-        import time
         import re
 
         for function_call in tool_call.function_calls:
@@ -405,14 +404,16 @@ class AudioLoop:
             last_distance = None
             last_sent_time = 0.0
 
-            # Action tools that should stream progress to Gemini
-            action_tools = ['send_action_goal', 'navigate_to_location']
+            # Action tools that should stream progress to Gemini (only navigation needs progress streaming)
+            action_tools = ['navigate_to_location']
             is_action_tool = function_call.name in action_tools
 
             # Define progress callback to receive real-time progress notifications
             async def progress_handler(progress: float, total: float | None, message: str | None):
                 """Handle progress notifications from MCP server and forward to Gemini"""
                 nonlocal last_distance, last_sent_time, is_action_tool
+
+                import time
 
                 # Print RAW feedback for debugging
                 print(f"\n📊 RAW FEEDBACK - progress: {progress}, total: {total}, message: {message}")
@@ -565,8 +566,8 @@ class AudioLoop:
                 types.FunctionResponse(
                     name=function_call.name,
                     id=function_call.id,
-                    response=response_data,
-                    will_continue=False if is_action_tool else None  # Signal final response for action tools
+                    response=response_data
+                    # Omit will_continue to signal successful completion
                 )
             ]
             print(function_responses)
@@ -792,7 +793,14 @@ class AudioLoop:
 
         Processes audio data, text responses, and tool calls from Gemini.
         Handles interruptions by clearing the audio queue.
+
+        PHASE 2 FIX: Tool calls run as async tasks to avoid blocking the receive loop.
+        This ensures WebSocket messages (including server pings) are processed continuously,
+        preventing "keepalive ping timeout" errors during long operations.
         """
+        # Track active tool call tasks
+        tool_call_tasks = set()
+
         while True:
             turn = self.session.receive()
             turn_text = ""
@@ -841,10 +849,21 @@ class AudioLoop:
                     continue
                 """
 
-                # Handle tool calls from Gemini
+                # Handle tool calls from Gemini - NON-BLOCKING
+                # Create async task instead of awaiting inline to keep receive loop active
                 tool_call = response.tool_call
                 if tool_call is not None:
-                    await self.handle_tool_call(tool_call)
+                    # Wait for any existing tool calls to complete first (sequential execution)
+                    # This prevents duplicate/parallel tool calls for the same action
+                    if tool_call_tasks:
+                        await asyncio.wait(tool_call_tasks)
+                        tool_call_tasks.clear()
+
+                    # Now create new task for this tool execution
+                    task = asyncio.create_task(self.handle_tool_call(tool_call))
+                    tool_call_tasks.add(task)
+                    # Remove from set when task completes
+                    task.add_done_callback(lambda t: tool_call_tasks.discard(t))
 
             # Turn is complete - signal end of audio stream
             async with self.audio_stream_lock:
@@ -947,6 +966,23 @@ class AudioLoop:
         for audio/video processing and communication.
         """
 
+        # PHASE 1 FIX: Monkey-patch websockets library to disable client-side keepalive
+        # This prevents "keepalive ping timeout" errors during long-running operations
+        # The websockets library's default 20s ping timeout is too aggressive for
+        # navigation actions that can take 40+ seconds
+        import websockets.asyncio.client
+        original_connect = websockets.asyncio.client.connect
+
+        def patched_connect(*args, **kwargs):
+            # Disable client-side ping/pong keepalive mechanism
+            # Let Gemini's server handle keepalive instead
+            kwargs.setdefault('ping_interval', None)  # No automatic pings from client
+            kwargs.setdefault('ping_timeout', None)   # No timeout on pong responses
+            return original_connect(*args, **kwargs)
+
+        websockets.asyncio.client.connect = patched_connect
+        print("🔧 Patched websockets library: disabled client-side keepalive")
+
         # Define logging callback to receive log messages from MCP server
         async def logging_handler(params):
             """Handle log messages (info, debug, warning, error) from MCP server"""
@@ -979,9 +1015,6 @@ class AudioLoop:
                 # The Live API does NOT support automatic MCP tool calling
                 # So we must manually convert tools and handle execution
                 functional_tools = []
-
-                # Action tools that need NON_BLOCKING behavior for streaming progress
-                action_tools = ['send_action_goal', 'navigate_to_location']
 
                 for tool in available_tools.tools:
                     tool_description = {"name": tool.name, "description": tool.description}
@@ -1035,9 +1068,6 @@ class AudioLoop:
                                 "required"
                             ]
 
-                    # Set behavior to NON_BLOCKING for action tools to enable streaming progress
-                    if tool.name in action_tools:
-                        tool_description["behavior"] = "NON_BLOCKING"
 
                     functional_tools.append(tool_description)
 

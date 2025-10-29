@@ -36,8 +36,8 @@ You can move the arm and gripper to the following states using /move_to_state:
 - close
 - can
 
-You can also get the use a drink from the mini fridge when they ask you for one. To do this follow these steps:
-1. Use /navigate_to_location to the mini fridge.
+You can use send_action_goal get the user a drink from the mini fridge when they ask you for one. To do this follow these steps in this order being very careful to not miss a step:
+1. Use /navigate_to_location to the mini fridge. 
 2. Use /locate_drink to find the requested drink and get its relative coordinates.
 3. Use the x, y, and z coordinates returned from /locate_drink to use /grab_drink to grab the requested drink.
 4. Use /navigate_to_location to go to where the user requested the drink be delivered.
