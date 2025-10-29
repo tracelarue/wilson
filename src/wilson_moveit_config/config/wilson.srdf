@@ -89,8 +89,8 @@
         <joint name="gripper_right_finger_joint" value="0"/>
     </group_state>
     <group_state name="can" group="gripper">
-        <joint name="gripper_left_finger_joint" value="0.03"/>
-        <joint name="gripper_right_finger_joint" value="-0.03"/>
+        <joint name="gripper_left_finger_joint" value="0.04"/>
+        <joint name="gripper_right_finger_joint" value="-0.04"/>
     </group_state>
 
     <!--END EFFECTOR: Purpose: Represent information about an end effector.-->

@@ -394,82 +394,125 @@ class AudioLoop:
         Args:
             tool_call: Tool call request from Gemini containing function calls
         """
+        import time
+        import re
+
         for function_call in tool_call.function_calls:
             print(f"\n🔧 Calling tool: {function_call.name}")
             print(f"   Arguments: {function_call.args}")
 
-            # Track last distance for detecting stuck actions
+            # Track last distance and time for detecting progress and throttling
             last_distance = None
-            distance_unchanged_count = 0
+            last_sent_time = 0.0
+
+            # Action tools that should stream progress to Gemini
+            action_tools = ['send_action_goal', 'navigate_to_location']
+            is_action_tool = function_call.name in action_tools
 
             # Define progress callback to receive real-time progress notifications
             async def progress_handler(progress: float, total: float | None, message: str | None):
-                """Handle progress notifications from MCP server during tool execution"""
-                nonlocal last_distance, distance_unchanged_count
+                """Handle progress notifications from MCP server and forward to Gemini"""
+                nonlocal last_distance, last_sent_time, is_action_tool
+
+                # Print RAW feedback for debugging
+                print(f"\n📊 RAW FEEDBACK - progress: {progress}, total: {total}, message: {message}")
 
                 if message:
-                    # Parse feedback message to extract distance_remaining for Nav2 actions
+                    # Parse feedback data from the message
+                    progress_data = {
+                        "status": "in_progress",
+                        "progress": progress,
+                        "message": message[:500]  # Truncate long messages
+                    }
+
+                    # Extract distance_remaining for Nav2 actions
+                    distance = None
                     if "distance_remaining" in message:
                         try:
-                            import re
                             # Look for 'distance_remaining': 2.84 or "distance_remaining": 2.84
                             match = re.search(r"['\"]distance_remaining['\"]:\s*([0-9.]+)", message)
                             if match:
                                 distance = float(match.group(1))
-
-                                # Check if distance is changing (action making progress)
-                                if last_distance is not None and abs(distance - last_distance) < 0.01:
-                                    distance_unchanged_count += 1
-                                    if distance_unchanged_count >= 5:
-                                        print(f"   Distance remaining: {distance:.2f} m (⚠️ No progress)")
-                                        return
-                                else:
-                                    distance_unchanged_count = 0
-
-                                last_distance = distance
+                                progress_data["distance_remaining"] = distance
                                 print(f"   Distance remaining: {distance:.2f} m")
-                                return
                         except (ValueError, AttributeError):
                             pass
 
                     # Also check for old format with just 'remaining'
                     elif "remaining" in message.lower() and "distance_remaining" not in message:
                         try:
-                            import re
                             match = re.search(r"['\"]remaining['\"]:\s*([0-9.]+)", message)
                             if match:
                                 remaining = float(match.group(1))
+                                progress_data["distance_remaining"] = remaining
                                 print(f"   Distance remaining: {remaining:.2f}")
-                                return
                         except (ValueError, AttributeError):
                             pass
 
                     # Check for completion/status messages
                     if "completed" in message.lower():
                         print(f"   {message}")
-                        return
-                    if "timed out" in message.lower():
+                        progress_data["status"] = "completed"
+                    elif "timed out" in message.lower():
                         print(f"   {message}")
-                        return
-                    if "failed" in message.lower() or "error" in message.lower():
+                        progress_data["status"] = "timeout"
+                    elif "failed" in message.lower() or "error" in message.lower():
                         print(f"   {message}")
-                        return
-
-                    # For other messages, show them concisely (suppress excessive feedback spam)
-                    # Only show every 100th feedback to avoid spam
-                    if "feedback #" in message.lower():
+                        progress_data["status"] = "error"
+                    elif "feedback #" in message.lower():
                         if progress % 100 == 0:  # Show every 100th feedback
                             print(f"   Progress update #{int(progress)}")
-                        return
+                    else:
+                        print(f"   Status: {message}")
 
-                    # Other messages
-                    print(f"   Status: {message}")
+                    # Send progress update to Gemini for action tools
+                    if is_action_tool:
+                        current_time = time.time()
+
+                        # Throttle updates: send every 5 seconds OR on significant distance change
+                        # More conservative to avoid overwhelming WebSocket connection
+                        should_send = False
+                        if current_time - last_sent_time > 5.0:
+                            should_send = True
+                        elif distance is not None and last_distance is not None:
+                            if abs(last_distance - distance) > 1.0:  # >1.0m change
+                                should_send = True
+                        elif last_distance is None and distance is not None:
+                            should_send = True  # First distance update
+
+                        if should_send:
+                            try:
+                                # Send intermediate progress response to Gemini
+                                progress_response = types.FunctionResponse(
+                                    name=function_call.name,
+                                    id=function_call.id,
+                                    response=progress_data,
+                                    will_continue=True  # More responses coming
+                                )
+                                await self.session.send_tool_response(
+                                    function_responses=[progress_response]
+                                )
+                                print(f"📤 Sent progress to Gemini: {progress_data.get('distance_remaining', 'N/A')}m")
+                                last_sent_time = current_time
+                                if distance is not None:
+                                    last_distance = distance
+                            except Exception as e:
+                                # WebSocket errors during progress updates are non-fatal
+                                # The final result will still be sent when action completes
+                                print(f"⚠️ Failed to send progress to Gemini (non-fatal): {e}")
+                                # Stop trying to send more progress after connection issues
+                                is_action_tool = False
 
             # Execute the tool call through MCP server with progress callback
+            # Add custom timeout for navigation actions (5 minutes instead of default 2 minutes)
+            tool_args = function_call.args.copy()
+            if function_call.name == "navigate_to_location":
+                tool_args["timeout"] = 300.0  # 5 minutes for navigation
+
             result = await self.mcp_session.call_tool(
                 name=function_call.name,
-                arguments=function_call.args,
-                progress_callback=progress_handler,  # Capture progress notifications
+                arguments=tool_args,
+                progress_callback=progress_handler,  # Capture progress notifications and forward to Gemini
             )
 
             # Check for structured content first (preferred for complex data)
@@ -513,16 +556,25 @@ class AudioLoop:
                 response_data = result_data
             except (json.JSONDecodeError, ValueError):
                 response_data = {"result": result_text}  # Fallback to string wrapper
-            print(response_data)
+                
+            #print(response_data)
+
+            # Send final response to Gemini
+            # For action tools, use will_continue=False to signal completion
             function_responses = [
                 types.FunctionResponse(
                     name=function_call.name,
                     id=function_call.id,
                     response=response_data,
+                    will_continue=False if is_action_tool else None  # Signal final response for action tools
                 )
             ]
             print(function_responses)
-            await self.session.send_tool_response(function_responses=function_responses)
+            try:
+                await self.session.send_tool_response(function_responses=function_responses)
+                print(f"✅ Sent final result to Gemini for {function_call.name}")
+            except Exception as e:
+                print(f"🔴 Error sending tool response: {e}")
 
     def _get_frame(self, cap):
         """
@@ -647,6 +699,31 @@ class AudioLoop:
         while True:
             message = await self.out_queue.get()
             await self.session.send_realtime_input(media=message)
+
+    async def websocket_keepalive(self):
+        """
+        Send periodic keepalive pings to prevent WebSocket timeout during long operations.
+
+        Runs independently of audio flow to ensure connection stays alive even when
+        event loop is busy with tool execution.
+        """
+        while True:
+            try:
+                # Wait 15 seconds between keepalives (well under 20s ping timeout)
+                await asyncio.sleep(15.0)
+
+                # Send minimal silence packet as keepalive
+                keepalive_audio = b'\x00\x00' * 8  # 16 bytes of silence
+                await self.session.send_realtime_input(
+                    media={"data": keepalive_audio, "mime_type": "audio/pcm"}
+                )
+                print("🔄 Sent WebSocket keepalive")
+            except asyncio.CancelledError:
+                # Task was cancelled, exit gracefully
+                break
+            except Exception as e:
+                # Keepalive failures are non-critical
+                print(f"⚠️ Keepalive failed (non-fatal): {e}")
 
     async def listen_audio(self):
         """
@@ -902,6 +979,10 @@ class AudioLoop:
                 # The Live API does NOT support automatic MCP tool calling
                 # So we must manually convert tools and handle execution
                 functional_tools = []
+
+                # Action tools that need NON_BLOCKING behavior for streaming progress
+                action_tools = ['send_action_goal', 'navigate_to_location']
+
                 for tool in available_tools.tools:
                     tool_description = {"name": tool.name, "description": tool.description}
 
@@ -954,6 +1035,10 @@ class AudioLoop:
                                 "required"
                             ]
 
+                    # Set behavior to NON_BLOCKING for action tools to enable streaming progress
+                    if tool.name in action_tools:
+                        tool_description["behavior"] = "NON_BLOCKING"
+
                     functional_tools.append(tool_description)
 
                 # Configure Gemini Live tools (MCP tools + built-in capabilities)
@@ -994,6 +1079,7 @@ class AudioLoop:
                         # Start all async tasks
                         send_text_task = task_group.create_task(self.send_text())
                         task_group.create_task(self.send_realtime())
+                        task_group.create_task(self.websocket_keepalive())  # Prevent timeout during long operations
                         task_group.create_task(self.listen_audio())
 
                         # Start video capture based on selected mode

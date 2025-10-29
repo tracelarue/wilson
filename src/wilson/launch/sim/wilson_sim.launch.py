@@ -177,6 +177,17 @@ def generate_launch_description():
         ],
     )
 
+    # Navigate To Location Action Server Node
+    navigate_to_location_server_node = Node(
+        package="navigate_to_location_action",
+        executable="navigate_to_location_server",
+        name="navigate_to_location_server",
+        output="screen",
+        parameters=[
+            {'use_sim_time': True},
+        ],
+    )
+
     # Timed launches to ensure proper startup sequence
     nav2_timer = TimerAction(
         period=3.0,
@@ -196,7 +207,7 @@ def generate_launch_description():
     # Action servers timer - start after move_group
     action_servers_timer = TimerAction(
         period=10.0,
-        actions=[grab_drink_server_node, locate_drink_server_node, move_to_state_server_node]
+        actions=[grab_drink_server_node, locate_drink_server_node, move_to_state_server_node, navigate_to_location_server_node]
     )
 
     # Teleop keyboard in separate terminal

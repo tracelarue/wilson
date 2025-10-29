@@ -1,0 +1,16 @@
+# Goal - Simple position and orientation in map frame
+float64 x
+float64 y
+float64 z
+float64 qx
+float64 qy
+float64 qz
+float64 qw
+---
+# Result - Clear message matching locate_drink format
+bool success
+string message
+---
+# Feedback - Distance remaining
+string status
+float64 distance_remaining
