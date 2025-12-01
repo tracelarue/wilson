@@ -404,8 +404,8 @@ class AudioLoop:
             last_distance = None
             last_sent_time = 0.0
 
-            # Action tools that should stream progress to Gemini (only navigation needs progress streaming)
-            action_tools = ['navigate_to_location']
+            # Action tools that should stream progress to Gemini
+            action_tools = ['send_action_goal']
             is_action_tool = function_call.name in action_tools
 
             # Define progress callback to receive real-time progress notifications
@@ -426,9 +426,28 @@ class AudioLoop:
                         "message": message[:500]  # Truncate long messages
                     }
 
-                    # Extract distance_remaining for Nav2 actions
+                    # Extract progress data based on action type
                     distance = None
-                    if "distance_remaining" in message:
+
+                    # Check for grab_drink feedback (current_stage and progress_percentage)
+                    if "current_stage" in message or "progress_percentage" in message:
+                        try:
+                            # Look for 'current_stage': 'Planning motion' pattern
+                            stage_match = re.search(r"['\"]current_stage['\"]:\s*['\"]([^'\"]+)['\"]", message)
+                            if stage_match:
+                                progress_data["stage"] = stage_match.group(1)
+                                print(f"   Stage: {stage_match.group(1)}")
+
+                            # Look for 'progress_percentage': 40.0 pattern
+                            percent_match = re.search(r"['\"]progress_percentage['\"]:\s*([0-9.]+)", message)
+                            if percent_match:
+                                progress_data["progress_percentage"] = float(percent_match.group(1))
+                                print(f"   Progress: {float(percent_match.group(1)):.1f}%")
+                        except (ValueError, AttributeError):
+                            pass
+
+                    # Extract distance_remaining for Nav2 actions
+                    elif "distance_remaining" in message:
                         try:
                             # Look for 'distance_remaining': 2.84 or "distance_remaining": 2.84
                             match = re.search(r"['\"]distance_remaining['\"]:\s*([0-9.]+)", message)
@@ -467,33 +486,57 @@ class AudioLoop:
                         print(f"   Status: {message}")
 
                     # Send progress update to Gemini for action tools
+                    print(f"   DEBUG: is_action_tool={is_action_tool}, function_name={function_call.name}")
                     if is_action_tool:
                         current_time = time.time()
 
-                        # Throttle updates: send every 5 seconds OR on significant distance change
-                        # More conservative to avoid overwhelming WebSocket connection
+                        # Much more relaxed conditions - send updates frequently
                         should_send = False
-                        if current_time - last_sent_time > 5.0:
+
+                        # Send first update immediately
+                        if last_sent_time == 0.0:
                             should_send = True
-                        elif distance is not None and last_distance is not None:
-                            if abs(last_distance - distance) > 1.0:  # >1.0m change
+                            print("   >>> First update - will send to Gemini")
+                        # Send every 2 seconds minimum
+                        elif current_time - last_sent_time > 2.0:
+                            should_send = True
+                            print(f"   >>> Time elapsed: {current_time - last_sent_time:.1f}s - will send to Gemini")
+                        # For navigation: also send on distance change
+                        elif distance is not None:
+                            if last_distance is None or abs(last_distance - distance) > 0.5:
                                 should_send = True
-                        elif last_distance is None and distance is not None:
-                            should_send = True  # First distance update
+                                print("   >>> Distance changed - will send to Gemini")
+                        # For grab_drink: always send if we have stage info
+                        elif "stage" in progress_data:
+                            should_send = True
+                            print("   >>> Stage update - will send to Gemini")
 
                         if should_send:
                             try:
                                 # Send intermediate progress response to Gemini
                                 progress_response = types.FunctionResponse(
-                                    name=function_call.name,
-                                    id=function_call.id,
-                                    response=progress_data,
-                                    will_continue=True  # More responses coming
+                                    response={"Progress": "In progress"},
+                                    #will_continue=True  # More responses coming
                                 )
                                 await self.session.send_tool_response(
-                                    function_responses=[progress_response]
+                                    function_responses=progress_response
                                 )
-                                print(f"📤 Sent progress to Gemini: {progress_data.get('distance_remaining', 'N/A')}m")
+
+                                # Log what we sent based on the action type
+                                if "distance_remaining" in progress_data:
+                                    print(f"📤 Sent progress to Gemini: {progress_data['distance_remaining']:.2f}m remaining")
+                                elif "stage" in progress_data or "progress_percentage" in progress_data:
+                                    stage_info = progress_data.get('stage', '')
+                                    percent_info = progress_data.get('progress_percentage', '')
+                                    if stage_info and percent_info:
+                                        print(f"📤 Sent progress to Gemini: {stage_info} ({percent_info:.0f}%)")
+                                    elif stage_info:
+                                        print(f"📤 Sent progress to Gemini: {stage_info}")
+                                    elif percent_info:
+                                        print(f"📤 Sent progress to Gemini: {percent_info:.0f}%")
+                                else:
+                                    print("📤 Sent progress to Gemini")
+
                                 last_sent_time = current_time
                                 if distance is not None:
                                     last_distance = distance
@@ -513,7 +556,7 @@ class AudioLoop:
             result = await self.mcp_session.call_tool(
                 name=function_call.name,
                 arguments=tool_args,
-                progress_callback=progress_handler,  # Capture progress notifications and forward to Gemini
+                #progress_callback=progress_handler,  # Capture progress notifications and forward to Gemini
             )
 
             # Check for structured content first (preferred for complex data)
@@ -561,15 +604,20 @@ class AudioLoop:
             #print(response_data)
 
             # Send final response to Gemini
-            # For action tools, use will_continue=False to signal completion
+            # IMPORTANT: Never use will_continue=False as it signals failure/retry
+            # Always omit will_continue for final successful responses
             function_responses = [
                 types.FunctionResponse(
                     name=function_call.name,
                     id=function_call.id,
                     response=response_data
-                    # Omit will_continue to signal successful completion
+                    # Always omit will_continue - it defaults to None which signals completion
                 )
             ]
+            if is_action_tool:
+                print("   Sending FINAL response (after progress updates)")
+            else:
+                print("   Sending FINAL response (no progress updates)")
             print(function_responses)
             try:
                 await self.session.send_tool_response(function_responses=function_responses)
@@ -819,7 +867,12 @@ class AudioLoop:
                                 async with self.audio_stream_lock:
                                     self.audio_stream_active = True
                                 has_audio_in_turn = True
-                            self.audio_in_queue.put_nowait(part.inline_data.data)
+                            try:
+                                self.audio_in_queue.put_nowait(part.inline_data.data)
+                            except asyncio.QueueFull:
+                                # Drop audio chunk if queue is full to prevent crash
+                                # This happens when audio arrives faster than it can be played
+                                pass
 
                         # Handle text responses
                         if part.text:
@@ -1075,8 +1128,8 @@ class AudioLoop:
                 tools = [
                     {
                         "function_declarations": functional_tools,
-                        "code_execution": {},  # Enable code execution
-                        "google_search": {},  # Enable web search
+                        #"code_execution": {},  # Enable code execution
+                        #"google_search": {},  # Enable web search
                     },
                 ]
 

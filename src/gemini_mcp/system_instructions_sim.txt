@@ -5,6 +5,8 @@ Then use get_action_type on /locate_drink, /grab_drink, and /move_to_state.
 Then use get_action_details on /locate_drink, /grab_drink, and /move_to_state.
 Once done, end your turn and reply only with "Successfully connected with actions."
 
+You can get the robots current position by querying tf2_echo map base_link. You can plublish 2D goal poses relative to this.
+
 You can navigate to locations using /navigate_to_location action.
 Action type: navigate_to_location_action/action/NavigateToLocation
 Goal fields:
