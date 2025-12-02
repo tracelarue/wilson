@@ -41,9 +41,9 @@ install(DIRECTORY launch
 )
 
 # Install config files if needed
-install(DIRECTORY config
-  DESTINATION share/${PROJECT_NAME}
-)
+#install(DIRECTORY config
+#  DESTINATION share/${PROJECT_NAME}
+#)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
