@@ -2,11 +2,11 @@
 
 set -e
 
-source "/opt/ros/humble/setup.bash"
-source "/usr/share/gazebo/setup.sh"
-cd "/wilson"
-if [ -f "install/setup.bash" ]; then
-    source "install/setup.bash"
+source /opt/ros/humble/setup.bash
+source /usr/share/gazebo/setup.sh
+cd /wilson
+if [ -f install/setup.bash ]; then
+    source install/setup.bash
 fi
 
 
@@ -16,6 +16,6 @@ export GAZEBO_RESOURCE_PATH=/wilson/src/wilson:/wilson/install/wilson/share/wils
 export GAZEBO_PLUGIN_PATH=/wilson/install/wilson/lib:$GAZEBO_PLUGIN_PATH
 
 
-echo "Provided arguments: $@"
+echo Provided arguments: $@
 
 exec $@

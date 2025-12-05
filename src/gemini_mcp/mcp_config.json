@@ -1,13 +1,11 @@
 {
-   "mcpServers": {
-      "ros-mcp-server": {
-         "command": "uv",
-         "args": [
-         "--directory",
-         "/home/trace/ros-mcp-server", 
-         "run",
-         "server.py"
-         ]
-      }
-   }
+  "mcpServers": {
+    "ros-mcp-server": {
+      "command": "bash",
+      "args": [
+        "-lc", 
+        "uvx ros-mcp --transport=stdio"
+      ]
+    }
+  }
 }

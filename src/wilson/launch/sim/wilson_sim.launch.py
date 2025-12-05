@@ -281,8 +281,7 @@ def generate_launch_description():
         initial_pose_timer,
 
         # Optional components
-        #gemini,
         teleop,
         rosbridge_timer,
-        gemini_ros_mcp_timer
+        #gemini_ros_mcp_timer
     ])
