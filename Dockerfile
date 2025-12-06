@@ -90,6 +90,9 @@ RUN echo "export ROS_DOMAIN_ID=7" >> ~/.bashrc \
  && echo "export QT_SCALE_FACTOR=1" >> ~/.bashrc \
  && echo "export DISPLAY=:0" >> ~/.bashrc
 
+RUN chmod -R +x /wilson
+RUN chmod -R +x /ros-mcp-server
+
  # Copy the entrypoint and bashrc scripts so we have
 # our container's environment set up correctly
 COPY entrypoint.sh /entrypoint.sh
