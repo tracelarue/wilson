@@ -168,31 +168,6 @@ class AudioLoop:
             message = await self.out_queue.get()
             await self.session.send_realtime_input(media=message)
 
-    async def websocket_keepalive(self):
-        """
-        Send periodic keepalive pings to prevent WebSocket timeout during long operations.
-
-        Runs independently of audio flow to ensure connection stays alive even when
-        event loop is busy with tool execution.
-        """
-        while True:
-            try:
-                # Wait 15 seconds between keepalives (well under 20s ping timeout)
-                await asyncio.sleep(5.0)
-
-                # Send minimal silence packet as keepalive
-                keepalive_audio = b'\x00\x00' * 8  # 16 bytes of silence
-                await self.session.send_realtime_input(
-                    media={"data": keepalive_audio, "mime_type": "audio/pcm"}
-                )
-                print("🔄 Sent WebSocket keepalive")
-            except asyncio.CancelledError:
-                # Task was cancelled, exit gracefully
-                break
-            except Exception as e:
-                # Keepalive failures are non-critical
-                print(f"⚠️ Keepalive failed (non-fatal): {e}")
-
     async def receive_audio(self):
         """
         Background task to receive responses from Gemini session.
@@ -200,9 +175,8 @@ class AudioLoop:
         Processes audio data, text responses, and tool calls from Gemini.
         Handles interruptions by clearing the audio queue.
 
-        PHASE 2 FIX: Tool calls run as async tasks to avoid blocking the receive loop.
-        This ensures WebSocket messages (including server pings) are processed continuously,
-        preventing "keepalive ping timeout" errors during long operations.
+        Tool calls run as async tasks to avoid blocking the receive loop.
+        This ensures WebSocket messages are processed continuously.
         """
         # Track active tool call tasks
         tool_call_tasks = set()
@@ -289,23 +263,6 @@ class AudioLoop:
         Connects to MCP server, configures tools, and starts all async tasks
         for audio/video processing and communication.
         """
-
-        # PHASE 1 FIX: Monkey-patch websockets library to disable client-side keepalive
-        # This prevents "keepalive ping timeout" errors during long-running operations
-        # The websockets library's default 20s ping timeout is too aggressive for
-        # navigation actions that can take 40+ seconds
-        import websockets.asyncio.client
-        original_connect = websockets.asyncio.client.connect
-
-        def patched_connect(*args, **kwargs):
-            # Disable client-side ping/pong keepalive mechanism
-            # Let Gemini's server handle keepalive instead
-            kwargs.setdefault('ping_interval', None)  # No automatic pings from client
-            kwargs.setdefault('ping_timeout', None)   # No timeout on pong responses
-            return original_connect(*args, **kwargs)
-
-        websockets.asyncio.client.connect = patched_connect
-        print("🔧 Patched websockets library: disabled client-side keepalive")
 
         # Define logging callback to receive log messages from MCP server
         async def logging_handler(params):
@@ -452,7 +409,6 @@ class AudioLoop:
                         # Start all async tasks
                         send_text_task = task_group.create_task(self.send_text())
                         task_group.create_task(self.send_realtime())
-                        task_group.create_task(self.websocket_keepalive())  # Prevent timeout during long operations
                         task_group.create_task(self.audio_handler.listen_audio())
 
                         # Start video capture based on selected mode
