@@ -127,14 +127,38 @@ class ToolHandler:
         except (json.JSONDecodeError, ValueError):
             return {"result": result_text}
 
+    def _get_scheduling(self, tool_name: str, response_data: dict) -> str:
+        """
+        Determine scheduling strategy for tool response.
+
+        Args:
+            tool_name: Name of the tool being executed
+            response_data: Response data from tool execution
+
+        Returns:
+            Scheduling strategy string or None
+        """
+        # Action goals should interrupt to report completion
+        if tool_name == "send_action_goal":
+            return "SILENT"
+        # Default: no special scheduling
+        return None
+
     async def _send_response(self, function_call, response_data: dict):
         """
-        Send final response to Gemini.
+        Send final response to Gemini with scheduling.
 
         Args:
             function_call: Original function call from Gemini
             response_data: Formatted response data
         """
+        # Determine scheduling based on tool type and result
+        scheduling = self._get_scheduling(function_call.name, response_data)
+
+        # Add scheduling to response
+        if scheduling:
+            response_data["scheduling"] = scheduling
+
         function_response = types.FunctionResponse(
             name=function_call.name,
             id=function_call.id,

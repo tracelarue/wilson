@@ -232,6 +232,7 @@ class AudioLoop:
                 if tool_call is not None:
                     # Wait for any existing tool calls to complete first (sequential execution)
                     # This prevents duplicate/parallel tool calls for the same action
+                    # NON_BLOCKING behavior still allows conversation to continue during execution
                     if tool_call_tasks:
                         await asyncio.wait(tool_call_tasks)
                         tool_call_tasks.clear()
@@ -299,6 +300,10 @@ class AudioLoop:
 
                 for tool in available_tools.tools:
                     tool_description = {"name": tool.name, "description": tool.description}
+
+                    # Add NON_BLOCKING behavior for long-running action tools
+                    if tool.name in ["send_action_goal"]:
+                        tool_description["behavior"] = "NON_BLOCKING"
 
                     # Process tool parameters if they exist
                     if tool.inputSchema["properties"]:
@@ -368,7 +373,7 @@ class AudioLoop:
                     ],  # "Enable text or audio responses based on configuration"
                     speech_config=types.SpeechConfig(
                         voice_config=types.VoiceConfig(
-                            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Charon")
+                            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Zubenelgenubi")
                         )
                     ),
                     system_instruction=types.Content(parts=[types.Part(text=self.system_instructions)]),

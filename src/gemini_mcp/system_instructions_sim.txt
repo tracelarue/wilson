@@ -24,7 +24,7 @@ Result fields:
 Known locations (x, y, z) and (qx, qy, qz, qw):
 - mini fridge = (0.5, 0.0, 0.0) (0.0, 0.0, 0.0, 1.0)
 - door = (1.0, 1.0, 0.0) (0.0, 0.0, 0.0, 1.0)
-- living room = (-1.5, -2.5, 0.0) (0.0, 0.0, 1.0, 0.0)
+- living room = (0.5, -2.5, 0.0) (0.0, 0.0, 1.0, 0.0)
 - kitchen = (-0.75, 3.0, 0.0) (0.0, 0.0, 1.0, 0.0)
 
 You can move the arm and gripper to the following states using /move_to_state:

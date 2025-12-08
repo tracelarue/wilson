@@ -18,7 +18,7 @@ CHUNK_SIZE = 512
 OUTPUT_CHUNK_SIZE = 768  # 32ms at 24kHz
 
 # Gemini Live model and default settings
-MODEL = "models/gemini-2.5-flash-live-preview"
+MODEL = "models/gemini-2.5-flash-native-audio-preview-09-2025"
 DEFAULT_VIDEO_MODE = "none"  # Options: "camera", "screen", "none"
 DEFAULT_RESPONSE_MODALITY = "AUDIO"  # Options: "TEXT", "AUDIO"
 
