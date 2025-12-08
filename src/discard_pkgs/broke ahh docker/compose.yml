@@ -1,0 +1,19 @@
+services:
+  wilson-sim:
+    build: .
+    container_name: wilson_sim
+    user: ros
+    environment:
+      - DISPLAY=:0
+      - QT_X11_NO_MITSHM=1
+      - LIBGL_ALWAYS_INDIRECT=1
+    volumes:
+      - .:/wilson
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /dev:/dev
+    network_mode: host
+    ipc: host
+    privileged: true
+    stdin_open: true
+    tty: true
+    command: bash

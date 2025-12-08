@@ -1,0 +1,3 @@
+I am using Ubuntu 22.04 and ROS2 Humble to create a gazebo simulation of a robot with a differential drive base and a 4 DOF manipulator arm with a gripper at the end effector, controlled with ros2_control. The robot is based on the TurtleBot3 manipulator. The end goal is to have a functioning gazebo simulation of the robot with the arm and gripper, which is also running nav2 navigation and moveit control.
+
+Maintain a log (filename: /robot_arm/.github/copilot-log.md) of interactions with GitHub Copilot. Review this log to improve responses based on what has previously worked or not worked. Keep the log entries brief, recording filename and edits made and whether those edits were successful or not. Create a log entry when instructed to.  

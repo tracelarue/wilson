@@ -1,0 +1,9 @@
+# Goal
+int32 count_from  # Starting number to count down from
+---
+# Result
+bool success      # Whether the countdown completed successfully
+int32 final_count # The final count reached
+---
+# Feedback
+int32 current_count  # Current count value

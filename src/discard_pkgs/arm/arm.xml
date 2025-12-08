@@ -1,0 +1,9 @@
+<library path="arm_hardware">
+  <class name="arm/RobotSystem"
+         type="ros2_control_demo_example_7::RobotSystem"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Robot hardware plugin for 6 dof robot tutorial.
+    </description>
+  </class>
+</library>

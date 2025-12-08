@@ -1,0 +1,13 @@
+gazebo:
+  ros__parameters:
+    publish_rate: 100.0
+
+gazebo_ros2_control:
+  ros__parameters:
+    use_sim_time: true
+
+# Enable clock publishing for simulation time
+world:
+  ros__parameters:
+    publish_clock: true
+    clock_topic: "/clock"

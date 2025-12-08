@@ -1,0 +1,11 @@
+# Default initial positions for robot's ros2_control fake system
+
+initial_positions:
+  #end_effector_roll_joint: 0
+  #end_effector_yaw_joint: 0
+  gripper_left_finger_joint: 0
+  gripper_right_finger_joint: 0
+  joint_1: 0
+  joint_2: 0
+  joint_3: 0
+  joint_4: 0

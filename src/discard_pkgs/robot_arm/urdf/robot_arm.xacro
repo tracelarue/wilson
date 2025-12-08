@@ -1,0 +1,492 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="arm">
+
+  <!-- ========== VARIABLE DEFINITIONS ========== -->
+
+  <!-- Base Link Properties -->
+  <xacro:property name="link0_radius" value="0.02"/>
+  <xacro:property name="link0_length" value="0.01"/>
+  <xacro:property name="link0_height" value="0.005"/>
+  <xacro:property name="link0_mass" value="0.01"/>
+  
+  <!-- Link 1 Properties -->
+  <xacro:property name="link1_length" value="0.03"/>
+  <xacro:property name="link1_width" value="0.02"/>
+  <xacro:property name="link1_height" value="0.03"/>
+  <xacro:property name="link1_offset_y" value="0.02"/>
+  <xacro:property name="link1_offset_z" value="0.015"/>
+  <xacro:property name="link1_mass" value="0.01"/>
+  
+  <!-- Link 2 Properties -->
+  <xacro:property name="link2_length" value="0.03"/>
+  <xacro:property name="link2_width" value="0.02"/>
+  <xacro:property name="link2_height" value="0.12"/>
+  <xacro:property name="link2_offset_y" value="${link2_width/2}"/>
+  <xacro:property name="link2_offset_z" value="${link2_height/2}"/>
+  <xacro:property name="link2_mass" value="0.01"/>
+  
+  <!-- Link 3 Properties -->
+  <xacro:property name="link3_length" value="0.1"/>
+  <xacro:property name="link3_width" value="0.02"/>
+  <xacro:property name="link3_height" value="0.03"/>
+  <xacro:property name="link3_offset_x" value="${link3_length/2}"/>
+  <xacro:property name="link3_offset_y" value="${link3_width/2}"/>
+  <xacro:property name="link3_offset_z" value="-0.03"/>
+  <xacro:property name="link3_mass" value="0.01"/>
+  
+  <!-- Link 4 Properties -->
+  <xacro:property name="link4_length" value="0.03"/>
+  <xacro:property name="link4_width" value="0.02"/>
+  <xacro:property name="link4_height" value="0.03"/>
+  <xacro:property name="link4_offset_x" value="${link4_length/2}"/>
+  <xacro:property name="link4_offset_y" value="${link4_width/2}"/>
+  <xacro:property name="link4_offset_z" value="0.03"/>
+  <xacro:property name="link4_mass" value="0.01"/>
+  
+  <!-- Gripper Properties -->
+  <xacro:property name="gripper_base_length" value="0.02"/>
+  <xacro:property name="gripper_base_width" value="0.12"/>
+  <xacro:property name="gripper_base_height" value="0.04"/>
+  <xacro:property name="gripper_base_offset_z" value="0.03"/>
+  <xacro:property name="gripper_base_mass" value="0.001"/>
+  
+  <xacro:property name="gripper_finger_length" value="0.1"/>
+  <xacro:property name="gripper_finger_width" value="0.02"/>
+  <xacro:property name="gripper_finger_height" value="0.02"/>
+  <xacro:property name="gripper_finger_mass" value="0.001"/>
+  <xacro:property name="gripper_max_opening" value="0.1"/>
+  
+  <!-- End Effector Properties -->
+  <xacro:property name="end_effector_offset_x" value="0.06"/>
+
+  <!-- ========== JOINT PROPERTIES ========== -->
+  
+  <!-- Joint angle variables (default values in radians) -->
+  <xacro:property name="joint_1_angle" value="0.0"/>
+  <xacro:property name="joint_2_angle" value="0.0"/>
+  <xacro:property name="joint_3_angle" value="${pi/2}"/>
+  <xacro:property name="joint_4_angle" value="0.0"/>
+
+  <!-- Joint limit variables for revolute joints (180 degree range) -->
+  <xacro:property name="joint_1_lower_limit" value="${-pi/2}"/>
+  <xacro:property name="joint_1_upper_limit" value="${pi/2}"/>
+  <xacro:property name="joint_2_lower_limit" value="${-pi/2}"/>
+  <xacro:property name="joint_2_upper_limit" value="${pi/2}"/>
+  <xacro:property name="joint_3_lower_limit" value="${-pi/2}"/>
+  <xacro:property name="joint_3_upper_limit" value="${pi/2}"/>
+  <xacro:property name="joint_4_lower_limit" value="${-pi/2}"/>
+  <xacro:property name="joint_4_upper_limit" value="${pi/2}"/>
+  
+  <!-- Joint effort and velocity limits -->
+  <xacro:property name="revolute_joint_effort" value="1000.0"/>
+  <xacro:property name="revolute_joint_velocity" value="2.5"/>
+  <xacro:property name="prismatic_joint_effort" value="50.0"/>
+  <xacro:property name="prismatic_joint_velocity" value="0.5"/>
+  
+  <!-- Joint origin offsets (calculated from link dimensions) -->
+  <xacro:property name="joint_1_offset_z" value="${link0_length}"/>
+  <xacro:property name="joint_2_offset_y" value="${-link2_width/2}"/>
+  <xacro:property name="joint_2_offset_z" value="${link1_offset_z}"/>
+  <xacro:property name="joint_3_offset_z" value="${link2_height}"/>
+  <xacro:property name="joint_4_offset_x" value="${link3_length}"/>
+  <xacro:property name="joint_4_offset_y" value="${link4_offset_y}"/>
+  <xacro:property name="gripper_base_joint_offset_x" value="${link4_offset_x + link4_length/2}"/>
+
+  <!-- ========== COLOR PROPERTIES ========== -->
+  
+  <!-- Named color definitions -->
+  <xacro:property name="black" value="0.1 0.1 0.1 1.0"/>
+  <xacro:property name="dark_grey" value="0.3 0.3 0.3 1.0"/>
+  <xacro:property name="grey" value="0.5 0.5 0.5 1.0"/>
+  <xacro:property name="light_grey" value="0.7 0.7 0.7 1.0"/>
+  <xacro:property name="white" value="0.9 0.9 0.9 1.0"/>
+  <xacro:property name="red" value="0.8 0.2 0.2 1.0"/>
+  <xacro:property name="green" value="0.2 0.8 0.2 1.0"/>
+  <xacro:property name="blue" value="0.2 0.2 0.8 1.0"/>
+
+  <!-- Color assignment for each link -->
+  <xacro:property name="base_color" value="${dark_grey}"/>
+  <xacro:property name="link1_color" value="${grey}"/>
+  <xacro:property name="link2_color" value="${light_grey}"/>
+  <xacro:property name="link3_color" value="${white}"/>
+  <xacro:property name="link4_color" value="${black}"/>
+  <xacro:property name="gripper_color" value="${red}"/>
+
+  <!-- ========== ROBOT STRUCTURE ========== -->
+
+  <!-- ========== GEOMETRY PROPERTIES ========== -->
+
+  <!-- base_joint fixes link0 to the environment -->
+  <joint name="joint_0" type="fixed">
+    <parent link="chassis"/>
+    <child link="link_0"/>
+    <origin xyz="0.200 -0.04 0.08" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <!-- Basic cylindrical base link -->
+  <link name="link_0">
+    <visual>
+      <origin xyz="0 0 ${link0_height}" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="${link0_radius}" length="${link0_length}"/>
+      </geometry>
+      <material name="base_material">
+        <color rgba="${base_color}"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${link0_height}" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="${link0_radius}" length="${link0_length}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${link0_mass}"/>
+      <origin xyz="0 0 ${link0_height}" rpy="0 0 0"/>
+      <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01"/>
+    </inertial>
+  </link>
+
+
+  <!-- joints - main serial chain -->
+  <joint name="joint_1" type="revolute">
+    <parent link="link_0"/>
+    <child link="link_1"/>
+    <origin xyz="0 0 ${joint_1_offset_z}" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="${revolute_joint_effort}" lower="${joint_1_lower_limit}" upper="${joint_1_upper_limit}" velocity="${revolute_joint_velocity}"/>
+  </joint>
+
+  <link name="link_1">
+    <visual>
+      <origin xyz="0 ${-link1_offset_y} ${link1_offset_z}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${link1_length} ${link1_width} ${link1_height}"/>
+      </geometry>
+      <material name="link1_material">
+        <color rgba="${link1_color}"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 ${-link1_offset_y} ${link1_offset_z}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${link1_length} ${link1_width} ${link1_height}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${link1_mass}"/>
+      <origin xyz="0 0 0.09" rpy="0 0 0"/>
+      <inertia ixx="0.008" ixy="0.0" ixz="0.0" iyy="0.008" iyz="0.0" izz="0.004"/>
+    </inertial>
+  </link>
+
+  <joint name="joint_2" type="revolute">
+    <parent link="link_1"/>
+    <child link="link_2"/>
+    <origin xyz="0 ${joint_2_offset_y} ${joint_2_offset_z}" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="${revolute_joint_effort}" lower="${joint_2_lower_limit}" upper="${joint_2_upper_limit}" velocity="${revolute_joint_velocity}"/>
+  </joint>  
+
+  <link name="link_2">
+    <visual>
+      <origin xyz="0 ${link2_offset_y} ${link2_offset_z}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${link2_length} ${link2_width} ${link2_height}"/>
+      </geometry>
+      <material name="link2_material">
+        <color rgba="${link2_color}"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 ${link2_offset_y} ${link2_offset_z}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${link2_length} ${link2_width} ${link2_height}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${link2_mass}"/>
+      <origin xyz="0.34 0 0" rpy="0 0 0"/>
+      <inertia ixx="0.005" ixy="0.0" ixz="0.0" iyy="0.12" iyz="0.0" izz="0.12"/>
+    </inertial>
+  </link>
+
+  <joint name="joint_3" type="revolute">
+    <parent link="link_2"/>
+    <child link="link_3"/>
+    <origin xyz="0 0 ${joint_3_offset_z}" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="${revolute_joint_effort}" lower="${joint_3_lower_limit}" upper="${joint_3_upper_limit}" velocity="${revolute_joint_velocity}"/>
+  </joint>
+
+  <link name="link_3">
+    <visual>
+      <origin xyz="${link3_offset_x} ${-link3_offset_y} 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${link3_length} ${link3_width} ${link3_height}"/>
+      </geometry>
+      <material name="link3_material">
+        <color rgba="${link3_color}"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="${link3_offset_x} ${-link3_offset_y} 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${link3_length} ${link3_width} ${link3_height}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${link3_mass}"/>
+      <origin xyz="0.25 0 0" rpy="0 0 0"/>
+      <inertia ixx="0.003" ixy="0.0" ixz="0.0" iyy="0.045" iyz="0.0" izz="0.045"/>
+    </inertial>
+  </link>
+
+  <joint name="joint_4" type="revolute">
+    <parent link="link_3"/>
+    <child link="link_4"/>
+    <origin xyz="${joint_4_offset_x} 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="${revolute_joint_effort}" lower="${joint_4_lower_limit}" upper="${joint_4_upper_limit}" velocity="${revolute_joint_velocity}"/>
+  </joint>
+
+  <link name="link_4">
+    <visual>
+      <origin xyz="${link4_offset_x} ${link4_offset_y} 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${link4_length} ${link4_width} ${link4_height}"/>
+      </geometry>
+      <material name="link4_material">
+        <color rgba="${link4_color}"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="${link4_offset_x} 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${link4_length} ${link4_width} ${link4_height}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${link4_mass}"/>
+      <origin xyz="0.09 0 0" rpy="0 0 0"/>
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.003" iyz="0.0" izz="0.003"/>
+    </inertial>
+  </link>
+
+  <!-- Gripper base link (attached to link_4) -->
+  <joint name="gripper_base_joint" type="fixed">
+    <parent link="link_4"/>
+    <child link="gripper_base"/>
+    <origin xyz="${link4_length} ${link4_offset_y} 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="gripper_base">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${gripper_base_length} ${gripper_base_width} ${gripper_base_height}"/>
+      </geometry>
+      <material name="gripper_base_material">
+        <color rgba="${gripper_color}"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${gripper_base_length} ${gripper_base_width} ${gripper_base_height}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${gripper_base_mass}"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+
+  <!-- Left finger prismatic joint and link -->
+  <joint name="gripper_left_finger_joint" type="prismatic">
+    <parent link="gripper_base"/>
+    <child link="gripper_left_finger"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="${prismatic_joint_effort}" lower="0.0" upper="${gripper_max_opening/2}" velocity="${prismatic_joint_velocity}"/>
+  </joint>
+
+  <link name="gripper_left_finger">
+    <visual>
+      <origin xyz="${gripper_finger_length/2} ${gripper_finger_width/2} 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${gripper_finger_length} ${gripper_finger_width} ${gripper_finger_height}"/>
+      </geometry>
+      <material name="gripper_finger_material">
+        <color rgba="${gripper_color}"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="${gripper_finger_length/2} ${gripper_finger_width/2} 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${gripper_finger_length} ${gripper_finger_width} ${gripper_finger_height}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${gripper_finger_mass}"/>
+      <origin xyz="0 ${-gripper_finger_width/2} ${gripper_finger_height/2}" rpy="0 0 0"/>
+      <inertia ixx="0.00005" ixy="0.0" ixz="0.0" iyy="0.00005" iyz="0.0" izz="0.00005"/>
+    </inertial>
+  </link>
+
+  <!-- Right finger prismatic joint and link -->
+  <joint name="gripper_right_finger_joint" type="prismatic">
+    <parent link="gripper_base"/>
+    <child link="gripper_right_finger"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 -1 0"/>
+    <limit effort="${prismatic_joint_effort}" lower="0.0" upper="${gripper_max_opening/2}" velocity="${prismatic_joint_velocity}"/>
+    <mimic joint="gripper_left_finger_joint" multiplier="1" offset="0"/>
+  </joint>
+
+  <link name="gripper_right_finger">
+    <visual>
+      <origin xyz="${gripper_finger_length/2} ${-gripper_finger_width/2} 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${gripper_finger_length} ${gripper_finger_width} ${gripper_finger_height}"/>
+      </geometry>
+      <material name="gripper_finger_material">
+        <color rgba="${gripper_color}"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="${gripper_finger_length/2} ${-gripper_finger_width/2} 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${gripper_finger_length} ${gripper_finger_width} ${gripper_finger_height}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="${gripper_finger_mass}"/>
+      <origin xyz="0 ${gripper_finger_width/2} ${gripper_finger_height/2}" rpy="0 0 0"/>
+      <inertia ixx="0.00005" ixy="0.0" ixz="0.0" iyy="0.00005" iyz="0.0" izz="0.00005"/>
+    </inertial>
+  </link>
+
+  <!-- End effector frame (for convenience in motion planning) -->
+  <joint name="end_effector_roll_joint" type="fixed">
+    <parent link="gripper_base"/>
+    <child link="end_effector_roll"/>
+    <origin xyz="${end_effector_offset_x} 0 0" rpy="0 0 0"/>
+    <!--
+    <axis xyz="1 0 0"/>
+    <limit effort="0.0" lower="-3.14" upper="3.14" velocity="1"/>
+  -->
+  </joint>
+
+  <link name="end_effector_roll">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.01 0.01 0.01"/>
+      </geometry>
+      <material name="end_effector_roll_material">
+        <color rgba="${green}"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="end_effector_yaw_joint" type="fixed">
+    <parent link="end_effector_roll"/>
+    <child link="end_effector_yaw"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <!--
+    <axis xyz="0 0 1"/>
+    <limit effort="0.0" lower="-3.14" upper="3.14" velocity="1"/>
+  -->
+  </joint>
+  <link name="end_effector_yaw">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.01 0.01 0.01"/>
+      </geometry>
+      <material name="end_effector_yaw_material">
+        <color rgba="${green}"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- End effector frame -->
+  <joint name="end_effector_joint" type="fixed">
+    <parent link="end_effector_yaw"/>
+    <child link="end_effector_frame"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="end_effector_frame">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.01 0.01 0.01"/>
+      </geometry>
+      <material name="end_effector_roll_material">
+        <color rgba="${green}"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- Gazebo Materials for Arm Links -->
+  
+  <!-- Base Link Material -->
+  <gazebo reference="link_0">
+    <material>Gazebo/DarkGrey</material>
+  </gazebo>
+
+  <!-- Link 1 Material -->
+  <gazebo reference="link_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+
+  <!-- Link 2 Material -->
+  <gazebo reference="link_2">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+
+  <!-- Link 3 Material -->
+  <gazebo reference="link_3">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+
+  <!-- Link 4 Material -->
+  <gazebo reference="link_4">
+    <material>Gazebo/Black</material>
+  </gazebo>
+
+  <!-- Gripper Base Material -->
+  <gazebo reference="gripper_base">
+    <material>Gazebo/Red</material>
+  </gazebo>
+
+  <!-- Gripper Finger Materials -->
+  <gazebo reference="gripper_left_finger">
+    <material>Gazebo/Red</material>
+  </gazebo>
+
+  <gazebo reference="gripper_right_finger">
+    <material>Gazebo/Red</material>
+  </gazebo>
+
+  <gazebo reference="end_effector_roll">
+    <material>Gazebo/Green</material>
+  </gazebo>
+
+  <gazebo reference="end_effector_yaw">
+    <material>Gazebo/Green</material>
+  </gazebo>
+
+  <!-- End effector frame material -->
+  <gazebo reference="end_effector_frame">
+    <material>Gazebo/Green</material>
+  </gazebo>
+
+  </xacro:macro>
+</robot>

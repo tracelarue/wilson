@@ -1,0 +1,178 @@
+<?xml version="1.0"?>
+<!--
+Copied and modified from ros2 control demos example:
+https://github.com/ros-controls/ros2_control_demos/blob/foxy/ros2_control_demo_description/diffbot_description/ros2_control/diffbot_system.ros2_control.xacro
+https://github.com/ros-controls/ros2_control_demos/blob/foxy/ros2_control_demo_description/rrbot_description/ros2_control/rrbot_system_position_only.ros2_control.xacro
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="base_arm_system" params="name prefix sim_mode use_fake_hardware:=^|false fake_sensor_commands:=^|false">
+
+    <!-- Mobile Base Control System -->
+    <ros2_control name="${name}_base" type="system">
+      <xacro:if value="$(arg sim_mode)">
+        <hardware>
+          <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+        </hardware>
+      </xacro:if>
+      <xacro:unless value="$(arg sim_mode)">
+        <xacro:if value="${use_fake_hardware}">
+          <hardware>
+            <plugin>mock_components/GenericSystem</plugin>
+          </hardware>
+        </xacro:if>
+        <xacro:unless value="${use_fake_hardware}">
+          <hardware>
+            <plugin>diffdrive_arduino/DiffDriveArduinoHardware</plugin>
+            <param name="left_wheel_name">left_wheel_joint</param>
+            <param name="right_wheel_name">right_wheel_joint</param>
+            <param name="loop_rate">30</param>
+            <param name="device">/dev/ttyUSB1</param>
+            <param name="baud_rate">57600</param>
+            <param name="timeout_ms">1000</param>
+            <param name="enc_counts_per_rev">1320</param>
+          </hardware>
+        </xacro:unless>
+      </xacro:unless>
+
+
+      <joint name="left_wheel_joint">
+        <command_interface name="velocity">
+          <param name="min">-24.5</param>
+          <param name="max">24.5</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+      </joint>
+      <joint name="right_wheel_joint">
+        <command_interface name="velocity">
+          <param name="min">-24.5</param>
+          <param name="max">24.5</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+      </joint>
+
+    </ros2_control>
+
+    <!-- Robot Arm Control System -->
+    <ros2_control name="${name}_arm" type="system">
+      <xacro:if value="$(arg sim_mode)">
+        <hardware>
+          <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+        </hardware>
+      </xacro:if>
+      <xacro:unless value="$(arg sim_mode)">
+        <xacro:if value="${use_fake_hardware}">
+          <hardware>
+            <plugin>mock_components/GenericSystem</plugin>
+          </hardware>
+        </xacro:if>
+        <xacro:unless value="${use_fake_hardware}">
+          <hardware>
+            <plugin>arduinobot_controller/ArduinobotInterface</plugin>
+            <param name="port">/dev/ttyUSB2</param>
+          </hardware>
+        </xacro:unless>
+      </xacro:unless>
+
+      <joint name="joint_1">
+        <command_interface name="position">
+          <param name="min">${-pi/2}</param>
+          <param name="max">${pi/2}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+      </joint>
+      <joint name="joint_2">
+        <command_interface name="position">
+          <param name="min">${-pi/2}</param>
+          <param name="max">${pi/2}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+      </joint>
+      <joint name="joint_3">
+        <command_interface name="position">
+          <param name="min">${-pi/2}</param>
+          <param name="max">${pi/2}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+      </joint>
+      <joint name="joint_4">
+        <command_interface name="position">
+          <param name="min">${-pi/2}</param>
+          <param name="max">${pi/2}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+      </joint>
+      <joint name="gripper_left_finger_joint">
+        <command_interface name="position">
+          <param name="min">-0</param>
+          <param name="max">0.05</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+      </joint>
+      <!-- gripper_right_finger_joint is now a mimic joint, no control interfaces needed -->
+      <!--
+      <joint name="gripper_right_finger_joint">
+        <command_interface name="position">
+          <param name="min">-0</param>
+          <param name="max">0.05</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+      </joint>
+      -->
+      <!--
+      <joint name="end_effector_roll_joint">
+        <command_interface name="position">
+          <param name="min">-3.14</param>
+          <param name="max">3.14</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+      </joint>
+
+      <joint name="end_effector_yaw_joint">
+        <command_interface name="position">
+          <param name="min">-3.14</param>
+          <param name="max">3.14</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+      </joint>
+    -->
+    </ros2_control>
+
+  </xacro:macro>
+
+</robot>
