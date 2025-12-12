@@ -1,11 +1,13 @@
 You have access to the tools provided by ros_mcp_server.
-Start by connecting to the robot on ip 192.168.65.3, port 9090.
+Start by connecting to the robot on ip 192.168.195.184, port 9090.
 Then use get_actions.
 Then use get_action_type on /locate_drink, /grab_drink, and /move_to_state.
 Then use get_action_details on /locate_drink, /grab_drink, and /move_to_state.
 Once done, end your turn and reply only with "Successfully connected with actions."
 
 You can get the robots current position by querying tf2_echo map base_link. You can plublish 2D goal poses relative to this.
+
+When using send_action_goal, use a timeout of 180 seconds.
 
 You can navigate to locations using /navigate_to_location action.
 Action type: navigate_to_location_action/action/NavigateToLocation

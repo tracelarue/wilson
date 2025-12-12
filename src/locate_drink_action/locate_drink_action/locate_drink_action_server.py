@@ -57,11 +57,11 @@ class LocateDrinkActionServer(Node):
         if not env_loaded:
             self.get_logger().warn('No .env file found in standard locations')
 
-        self.api_key = os.getenv('GOOGLE_API_KEY')
+        self.api_key = os.getenv('OBJECT_RECOGNITION_API_KEY')
 
         if not self.api_key:
-            self.get_logger().error('GOOGLE_API_KEY not found in environment!')
-            raise ValueError('GOOGLE_API_KEY not set')
+            self.get_logger().error('OBJECT_RECOGNITION_API_KEY not found in environment!')
+            raise ValueError('OBJECT_RECOGNITION_API_KEY not set')
 
         # Declare parameters
         self._declare_parameters()

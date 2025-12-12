@@ -230,7 +230,7 @@ def generate_launch_description():
     )
 
     gemini_ros_mcp = ExecuteProcess(
-        cmd=['tilix', '-e', 'bash', '-c', 'python3 gemini_client.py --responses=AUDIO; echo "\n\nScript exited. Press Enter to close..."; read'],
+        cmd=['tilix', '-e', 'bash', '-c', 'python3 original_gemini_client.py --responses=TEXT; echo "\n\nScript exited. Press Enter to close..."; read'],
         cwd=gemini_mcp_path,
         output='screen',
     )
@@ -256,7 +256,7 @@ def generate_launch_description():
     
     # Timer for initial pose publisher - start after localization is ready
     initial_pose_timer = TimerAction(
-        period=20.0,  # Wait for gazebo to be ready
+        period=15.0,  # Wait for gazebo to be ready
         actions=[initial_pose_publisher]
     )
     

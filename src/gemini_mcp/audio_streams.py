@@ -38,6 +38,7 @@ class AudioStreamHandler:
         out_queue,
         mic_lock,
         audio_stream_lock,
+        pya,
         active_muting=True,
     ):
         """
@@ -56,6 +57,7 @@ class AudioStreamHandler:
             out_queue: Queue for outgoing audio to Gemini
             mic_lock: Lock for microphone muting
             audio_stream_lock: Lock for audio stream state
+            pya: PyAudio instance to use for audio I/O
             active_muting: Whether to mute mic during playback
         """
         self.mode = mode
@@ -82,8 +84,8 @@ class AudioStreamHandler:
         self.audio_stream_active = False
         self.last_audio_chunk_time = None
 
-        # PyAudio instance
-        self.pya = pyaudio.PyAudio()
+        # PyAudio instance (shared)
+        self.pya = pya
         self.audio_stream = None
 
     async def listen_audio(self):

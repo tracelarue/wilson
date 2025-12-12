@@ -50,6 +50,9 @@ if sys.version_info < (3, 11, 0):
     asyncio.TaskGroup = taskgroup.TaskGroup
     asyncio.ExceptionGroup = exceptiongroup.ExceptionGroup
 
+# Global PyAudio instance (shared across handlers)
+pya = pyaudio.PyAudio()
+
 
 class AudioLoop:
     """
@@ -407,6 +410,7 @@ class AudioLoop:
                             out_queue=self.out_queue,
                             mic_lock=self.mic_lock,
                             audio_stream_lock=self.audio_stream_lock,
+                            pya=pya,
                             active_muting=self.active_muting,
                         )
                         self.tool_handler = ToolHandler(mcp_session, session)
