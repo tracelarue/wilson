@@ -60,7 +60,6 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install \
-  ultralytics \
   pyserial \
   inputs \
   ArducamDepthCamera \
@@ -73,7 +72,10 @@ RUN pip3 install \
   pillow \
   mss \
   python-dotenv \
-  "numpy>=1.21.0,<2.0.0" 
+  mcp[cli] \
+  "numpy>=1.21.0,<2.0.0" \
+  taskgroup \
+
 
 RUN apt-get update \
   && apt-get install -y \

@@ -230,7 +230,7 @@ def generate_launch_description():
     )
 
     gemini_ros_mcp = ExecuteProcess(
-        cmd=['tilix', '-e', 'bash', '-c', 'python3 original_gemini_client.py --responses=TEXT; echo "\n\nScript exited. Press Enter to close..."; read'],
+        cmd=['tilix', '-e', 'bash', '-c', 'python3 og.py --responses="AUDIO"; echo "\n\nScript exited. Press Enter to close..."; read'],
         cwd=gemini_mcp_path,
         output='screen',
     )

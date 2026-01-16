@@ -277,7 +277,7 @@ if not api_key:
     )
 
 client = genai.Client(
-    http_options={"api_version": "v1beta"},
+    http_options={"api_version": "v1alpha"},
     api_key=api_key,
 )
 
@@ -1167,6 +1167,7 @@ class AudioLoop:
                             prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Charon")
                         )
                     ),
+                    proactivity={'proactive_audio': True},
                     system_instruction=types.Content(parts=[types.Part(text=self.system_instructions)]),
                     tools=tools,
                 )
