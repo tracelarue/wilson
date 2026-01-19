@@ -72,6 +72,7 @@ RUN pip3 install \
   pillow \
   mss \
   python-dotenv \
+  mcp \
   mcp[cli] \
   "numpy>=1.21.0,<2.0.0" \
   taskgroup \

@@ -40,6 +40,47 @@ MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025"
 DEFAULT_VIDEO_MODE = "none"  # Options: "camera", "screen", "none"
 DEFAULT_RESPONSE_MODALITY = "AUDIO"  # Options: "TEXT", "AUDIO"
 
+# Load server configuration
+mcp_config = load_mcp_config()
+
+# Create server parameters for stdio connection
+server_params = StdioServerParameters(
+    command=mcp_config["command"],
+    args=mcp_config["args"],
+    env=mcp_config.get("env"),
+)
+
+# Load Google API key from environment files in priority order
+# 1. First try /wilson/.env
+# 2. Then try /home/trace/wilson/.env
+env_paths = [
+    "/wilson/.env",
+    "/home/trace/wilson/.env",
+]
+
+api_key = None
+for env_path in env_paths:
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        api_key = os.environ.get("GOOGLE_API_KEY")
+        if api_key:
+            print(f"Loaded Google API key from {env_path}")
+            break
+
+if not api_key:
+    raise ValueError(
+        "GOOGLE_API_KEY not found. Please ensure it exists in either "
+        "/wilson/.env or /home/trace/wilson/.env"
+    )
+
+client = genai.Client(
+    http_options={"api_version": "v1beta"},
+    api_key=api_key,
+)
+
+
+pya = pyaudio.PyAudio()
+
 # System instructions are loaded from separate files based on mode
 # See system_instructions_sim.txt and system_instructions_real.txt
 
@@ -241,48 +282,6 @@ def find_audio_device(device_index, device_type="input"):
         print(f"🔴 Error finding {device_type} device: {e}")
         pya_temp.terminate()
         return None
-
-
-# Load server configuration
-mcp_config = load_mcp_config()
-
-# Create server parameters for stdio connection
-server_params = StdioServerParameters(
-    command=mcp_config["command"],
-    args=mcp_config["args"],
-    env=mcp_config.get("env"),
-)
-
-# Load Google API key from environment files in priority order
-# 1. First try /wilson/.env
-# 2. Then try /home/trace/wilson/.env
-env_paths = [
-    "/wilson/.env",
-    "/home/trace/wilson/.env",
-]
-
-api_key = None
-for env_path in env_paths:
-    if os.path.exists(env_path):
-        load_dotenv(env_path)
-        api_key = os.environ.get("GOOGLE_API_KEY")
-        if api_key:
-            print(f"Loaded Google API key from {env_path}")
-            break
-
-if not api_key:
-    raise ValueError(
-        "GOOGLE_API_KEY not found. Please ensure it exists in either "
-        "/wilson/.env or /home/trace/wilson/.env"
-    )
-
-client = genai.Client(
-    http_options={"api_version": "v1beta"},
-    api_key=api_key,
-)
-
-
-pya = pyaudio.PyAudio()
 
 
 class AudioLoop:
