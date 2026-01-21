@@ -216,3 +216,5 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 core
+src/arduino/MLX90393v3.zip
+src/arduino/MLX90393.zip

@@ -7,8 +7,8 @@ locate_drink_action_server:
     z_tolerance: 0.02    # Distance tolerance (meters) - success when |error_z| < z_tolerance
 
     # Control parameters (proportional control gains)
-    k_linear: 2.0      # Linear velocity gain (higher = faster forward/backward movement)
-    k_angular: 5.0   # Angular velocity gain (higher = faster rotation)
+    k_linear: 3.0     # Linear velocity gain (higher = faster forward/backward movement)
+    k_angular: 10.0   # Angular velocity gain (higher = faster rotation)
     max_linear_vel: 0.5  # Maximum linear velocity (m/s)
     max_angular_vel: 0.5 # Maximum angular velocity (rad/s)
     min_movement_threshold: 0.001  # Minimum velocity to prevent oscillations

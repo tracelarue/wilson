@@ -36,7 +36,7 @@ CHUNK_SIZE = 512
 OUTPUT_CHUNK_SIZE = 768  # 32ms at 24kHz
 
 # Gemini Live model and default settings
-MODEL = "models/gemini-2.5-flash-live-preview"
+MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025"
 DEFAULT_VIDEO_MODE = "none"  # Options: "camera", "screen", "none"
 DEFAULT_RESPONSE_MODALITY = "AUDIO"  # Options: "TEXT", "AUDIO"
 
@@ -734,7 +734,12 @@ class AudioLoop:
                                 async with self.audio_stream_lock:
                                     self.audio_stream_active = True
                                 has_audio_in_turn = True
-                            self.audio_in_queue.put_nowait(part.inline_data.data)
+                            try:
+                                self.audio_in_queue.put_nowait(part.inline_data.data)
+                            except asyncio.QueueFull:
+                                # Drop audio chunk if queue is full to prevent crash
+                                # This happens when audio arrives faster than it can be played
+                                pass
 
                         # Handle text responses
                         if part.text:

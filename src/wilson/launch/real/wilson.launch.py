@@ -181,13 +181,13 @@ def generate_launch_description():
 
     # Optional external processes
     gemini = ExecuteProcess(
-        cmd=['tilix', '-e', 'ros2', 'run', 'gemini', 'gemini_node', '--mode', 'robot', '--video', 'camera'],
+        cmd=['tilix', '-e', 'bash', '-c', 'ros2 run gemini gemini_node --mode robot --video camera; code=$?; if [ $code -ne 0 ]; then echo "Process exited with code $code. Press Enter to close..."; read; fi'],
         output='screen',
     )
 
 
     rosbridge_server = ExecuteProcess(
-        cmd=['tilix', '-e', 'ros2', 'launch', 'rosbridge_server', 'rosbridge_websocket_launch.xml'],
+        cmd=['tilix', '-e', 'bash', '-c', 'ros2 launch rosbridge_server rosbridge_websocket_launch.xml; code=$?; if [ $code -ne 0 ]; then echo "Process exited with code $code. Press Enter to close..."; read; fi'],
         cwd='/wilson',
         output='screen',
     )
@@ -199,9 +199,9 @@ def generate_launch_description():
     )
 
     gemini_ros_mcp = ExecuteProcess(
-        cmd=['tilix', '-e', 'python3', 'gemini_client.py', '--mode=robot'],
-        cwd=gemini_mcp_path,
-        output='screen',
+    cmd=['tilix', '-e', 'bash', '-c', 'python3 gemini_client.py --mode=robot; echo "Process finished. Press enter to close..."; read'],
+    cwd=gemini_mcp_path,
+    output='screen',
     )
 
     gemini_ros_mcp_timer = TimerAction(
