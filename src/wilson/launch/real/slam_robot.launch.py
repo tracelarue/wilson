@@ -19,10 +19,10 @@ def generate_launch_description():
     slam_params = os.path.join(get_package_share_directory(package_name),'config','raspi_mapper_params_online_async.yaml')
 
 
-    robot = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([os.path.join(
-            get_package_share_directory(package_name),'launch','real','robot.launch.py')]), 
-    )
+    #robot = IncludeLaunchDescription(
+    #    PythonLaunchDescriptionSource([os.path.join(
+    #        get_package_share_directory(package_name),'launch','real','robot.launch.py')]), 
+    #)
 
     slam = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -34,6 +34,5 @@ def generate_launch_description():
     )
     # Launch them all!
     return LaunchDescription([
-        robot,
         slam,
     ])

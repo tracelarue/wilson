@@ -16,6 +16,6 @@ export GAZEBO_RESOURCE_PATH=/wilson/src/wilson:/wilson/install/wilson/share/wils
 export GAZEBO_PLUGIN_PATH=/wilson/install/wilson/lib:$GAZEBO_PLUGIN_PATH
 
 
-echo "Provided arguments: $@"
+echo Provided arguments: $@
 
 exec $@

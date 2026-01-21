@@ -27,7 +27,7 @@ def generate_launch_description():
     set_rviz_log_level = SetEnvironmentVariable('ROSCONSOLE_MIN_SEVERITY', 'WARN')
     
     # Robot description setup
-    xacro_file = os.path.join(pkg_path, 'urdf', 'wilson_real.urdf.xacro')
+    xacro_file = os.path.join(pkg_path, 'urdf', 'wilson.urdf.xacro')
     robot_description_config = Command([
         'xacro ', xacro_file, 
         ' use_sim_time:=', use_sim_time,
@@ -56,7 +56,7 @@ def generate_launch_description():
     # Launch description
     return LaunchDescription([
         # Environment setup
-        #set_rviz_log_level,
+        set_rviz_log_level,
         
         # Launch arguments
         declare_use_sim_time,
@@ -66,5 +66,5 @@ def generate_launch_description():
         
         # Nodes
         node_robot_state_publisher,
-        #node_rviz2
+        node_rviz2
     ])

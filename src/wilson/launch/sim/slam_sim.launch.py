@@ -14,7 +14,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
 
     package_name='wilson'
-    slam_params = os.path.join(get_package_share_directory(package_name),'config','raspi_mapper_params_online_async.yaml')
+    slam_params = os.path.join(get_package_share_directory(package_name),'config','mapper_params_online_async.yaml')
 
     sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -33,6 +33,6 @@ def generate_launch_description():
 
 
     return LaunchDescription([
-        sim,
+        #sim,
         slam,
     ])

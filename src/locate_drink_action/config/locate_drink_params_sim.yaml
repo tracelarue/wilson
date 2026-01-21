@@ -7,10 +7,10 @@ locate_drink_action_server:
     z_tolerance: 0.02   # Distance tolerance (meters) - success when |error_z| < z_tolerance
 
     # Control parameters (proportional control gains)
-    k_linear: 1.1       # Linear velocity gain (higher = faster forward/backward movement)
-    k_angular: 1.5     # Angular velocity gain (higher = faster rotation)
-    max_linear_vel: 1.0  # Maximum linear velocity (m/s)
-    max_angular_vel: 1.0 # Maximum angular velocity (rad/s)
+    k_linear: 1.2     # Linear velocity gain (higher = faster forward/backward movement)
+    k_angular: 2.0     # Angular velocity gain (higher = faster rotation)
+    max_linear_vel: 0.5  # Maximum linear velocity (m/s)
+    max_angular_vel: 0.5 # Maximum angular velocity (rad/s)
     min_movement_threshold: 0.001  # Minimum velocity to prevent oscillations
 
     # Camera parameters - SIMULATION (Gazebo)
@@ -20,10 +20,10 @@ locate_drink_action_server:
     image_width: 640     # Image width in pixels
     image_height: 480    # Image height in pixels
     depth_sample_size: 5 # Number of pixels (NxN window) to average for depth calculation
-    bbox_shift_ratio: 0.0 # Horizontal shift for depth sampling as ratio of bbox height (sim cameras are aligned, no offset needed)
+    bbox_shift_ratio: 0.3 # Horizontal shift for depth sampling as ratio of bbox height (sim cameras are aligned, no offset needed)
 
     # Y-value override (for debugging/testing)
-    override_y_value: false  # Enable to force Y value to fixed_y_value (disables calculated Y from depth camera)
+    override_y_value: true  # Enable to force Y value to fixed_y_value (disables calculated Y from depth camera)
     fixed_y_value: 0.1       # Fixed Y value (meters) when override_y_value is true
 
     # Operation parameters

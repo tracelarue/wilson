@@ -153,8 +153,10 @@ private:
             moveit::planning_interface::MoveGroupInterface move_group(shared_from_this(), "arm");
             moveit::planning_interface::MoveGroupInterface gripper_group(shared_from_this(), "gripper");
 
-            // Execute the solution
-            auto execute_result = executeTaskSolution(*task.solutions().front(), move_group, gripper_group);
+            // Execute the solution with progress reporting
+            double execution_progress = 60.0;  // Starting at 60% (after planning)
+            auto execute_result = executeTaskSolution(*task.solutions().front(), move_group, gripper_group,
+                                                      goal_handle, feedback, execution_progress);
             if (execute_result.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS) {
                 RCLCPP_ERROR(LOGGER, "Task execution failed with error code: %d", execute_result.val);
                 result->success = false;
@@ -170,10 +172,7 @@ private:
 
             result->success = true;
             result->message = "Successfully grabbed drink";
-            result->final_drink_pose.position.x = target_point_out.point.x;
-            result->final_drink_pose.position.y = target_point_out.point.y;
-            result->final_drink_pose.position.z = target_point_out.point.z;
-            result->final_drink_pose.orientation.w = 1.0;
+            // Final drink pose not needed in result
 
             goal_handle->succeed(result);
             RCLCPP_INFO(LOGGER, "Goal succeeded");
@@ -267,13 +266,23 @@ private:
     moveit::core::MoveItErrorCode executeTaskSolution(
         const mtc::SolutionBase& solution,
         moveit::planning_interface::MoveGroupInterface& move_group,
-        moveit::planning_interface::MoveGroupInterface& gripper)
+        moveit::planning_interface::MoveGroupInterface& gripper,
+        const std::shared_ptr<GoalHandleGrabDrink>& goal_handle,
+        std::shared_ptr<GrabDrink::Feedback>& feedback,
+        double& progress_percentage)
     {
         // Check if this is a SubTrajectory (leaf node)
         if (const auto* sub_traj = dynamic_cast<const mtc::SubTrajectory*>(&solution)) {
             auto traj = sub_traj->trajectory();
             if (!traj || traj->empty()) {
                 return moveit::core::MoveItErrorCode::SUCCESS;  // Empty trajectory, skip
+            }
+
+            // Get stage info for progress reporting
+            std::string stage_name = "Executing motion";
+            auto stage_info = sub_traj->creator();
+            if (stage_info) {
+                stage_name = stage_info->name();
             }
 
             // Determine which group this trajectory belongs to
@@ -285,6 +294,42 @@ private:
                     break;
                 }
             }
+
+            // Update progress based on stage name
+            if (stage_name.find("transition to grab") != std::string::npos) {
+                progress_percentage = 62.0;
+                feedback->current_stage = "Moving to grab position";
+            } else if (stage_name.find("ready to grab") != std::string::npos) {
+                progress_percentage = 68.0;
+                feedback->current_stage = "Positioning for grasp";
+            } else if (stage_name.find("open hand") != std::string::npos) {
+                progress_percentage = 74.0;
+                feedback->current_stage = "Opening gripper";
+            } else if (stage_name.find("approach") != std::string::npos) {
+                progress_percentage = 80.0;
+                feedback->current_stage = "Approaching drink";
+            } else if (stage_name.find("close hand") != std::string::npos) {
+                progress_percentage = 85.0;
+                feedback->current_stage = "Closing gripper on drink";
+            } else if (stage_name.find("lift") != std::string::npos) {
+                progress_percentage = 90.0;
+                feedback->current_stage = "Lifting drink";
+            } else if (stage_name.find("return") != std::string::npos || stage_name.find("home") != std::string::npos) {
+                progress_percentage = 95.0;
+                feedback->current_stage = "Returning to home position";
+            } else if (is_gripper) {
+                // Generic gripper operation
+                progress_percentage = std::min(progress_percentage + 3.0, 95.0);
+                feedback->current_stage = "Operating gripper";
+            } else {
+                // Generic arm movement
+                progress_percentage = std::min(progress_percentage + 5.0, 95.0);
+                feedback->current_stage = "Moving arm";
+            }
+
+            feedback->progress_percentage = progress_percentage;
+            goal_handle->publish_feedback(feedback);
+            RCLCPP_INFO(LOGGER, "Stage: %s (%.0f%%)", feedback->current_stage.c_str(), progress_percentage);
 
             // Execute using appropriate move group
             moveit::planning_interface::MoveGroupInterface::Plan plan;
@@ -309,7 +354,8 @@ private:
         else if (const auto* sequence = dynamic_cast<const mtc::SolutionSequence*>(&solution)) {
             // Recursively execute all sub-solutions in order
             for (const auto* sub_solution : sequence->solutions()) {
-                auto result = executeTaskSolution(*sub_solution, move_group, gripper);
+                auto result = executeTaskSolution(*sub_solution, move_group, gripper,
+                                                 goal_handle, feedback, progress_percentage);
                 if (result.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS) {
                     return result;
                 }
@@ -317,15 +363,16 @@ private:
         }
         // Check if this is a WrappedSolution
         else if (const auto* wrapped = dynamic_cast<const mtc::WrappedSolution*>(&solution)) {
-            return executeTaskSolution(*wrapped->wrapped(), move_group, gripper);
+            return executeTaskSolution(*wrapped->wrapped(), move_group, gripper,
+                                      goal_handle, feedback, progress_percentage);
         }
 
         return moveit::core::MoveItErrorCode::SUCCESS;
     }
 
     mtc::Task createTask(const geometry_msgs::msg::Point& drink_position,
-                        [[maybe_unused]] const std::shared_ptr<GoalHandleGrabDrink>& goal_handle,
-                        [[maybe_unused]] std::shared_ptr<GrabDrink::Feedback>& feedback)
+                        const std::shared_ptr<GoalHandleGrabDrink>& goal_handle,
+                        std::shared_ptr<GrabDrink::Feedback>& feedback)
     {
         mtc::Task task;
         task.stages()->setName("grab drink task");

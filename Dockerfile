@@ -74,6 +74,13 @@ RUN pip3 install \
   mss \
   python-dotenv
 
+RUN apt-get update \
+  && apt-get install -y \
+  alsa-utils \
+  pulseaudio-utils \
+  libasound2-plugins \
+  && rm -rf /var/lib/apt/lists/*
+
 RUN usermod -a -G dialout ${USERNAME}
 RUN usermod -a -G video ${USERNAME}
 RUN usermod -a -G audio ${USERNAME}
