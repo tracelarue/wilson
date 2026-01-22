@@ -8,10 +8,14 @@
 
 exceptiongroup>=1.2.2
 google-genai>=1.8.0
-mcp[cli]>=1.6.0
+mcp[cli]>=1.13.0
 mss>=10.0.0
 opencv-python>=4.11.0.86
-pillow>=11.1.0
+pillow>=11.3.0
 pyaudio>=0.2.14
 python-dotenv>=1.1.0
 taskgroup>=0.2.2
+websocket-client>=1.8.0
+fastmcp>=2.11.3
+jsonschema>=4.25.1
+packaging>=25.0
