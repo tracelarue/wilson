@@ -80,7 +80,7 @@ You can use RViz panels to send navigation goals, control the arm, and monitor A
 In this video, Wilson is asked to go to the living room. For the purpose of this demo, I have enabled text input and output, but when Wilson is aroudn the house, you would speak this command to him and he would respond accordingly.
 ![AI controlled navigation demo](pictures/gemini_demo_gif.gif)
 
-## Try the simulation yourself! 🐳
+## Try the simulation yourself! (Under maintenance and may be broken due to recent changes)
 
 <details>
 <summary><strong>🐧 Linux Instructions</strong></summary>
