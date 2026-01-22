@@ -60,7 +60,6 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install \
-  "numpy>=1.21.0,<2.0.0" \
   pyserial \
   inputs \
   ArducamDepthCamera \
@@ -72,7 +71,12 @@ RUN pip3 install \
   pyaudio \
   pillow \
   mss \
-  python-dotenv
+  python-dotenv \
+  mcp \
+  mcp[cli] \
+  "numpy>=1.21.0,<2.0.0" \
+  taskgroup \
+
 
 RUN apt-get update \
   && apt-get install -y \
@@ -90,8 +94,6 @@ RUN echo "export ROS_DOMAIN_ID=7" >> ~/.bashrc \
  && echo "export QT_SCALE_FACTOR=1" >> ~/.bashrc \
  && echo "export DISPLAY=:0" >> ~/.bashrc
 
-RUN chmod -R +x /wilson
-RUN chmod -R +x /ros-mcp-server
 
  # Copy the entrypoint and bashrc scripts so we have
 # our container's environment set up correctly
