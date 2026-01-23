@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(locate_drink_action)
+project(locate_object_action)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -15,12 +15,12 @@ find_package(rosidl_default_generators REQUIRED)
 
 # Generate action messages
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "action/LocateDrink.action"
+  "action/LocateObject.action"
   DEPENDENCIES geometry_msgs
 )
 
 # Install Python modules directory
-install(DIRECTORY locate_drink_action
+install(DIRECTORY locate_object_action
   DESTINATION lib/python3.10/site-packages
   PATTERN "*.pyc" EXCLUDE
   PATTERN "__pycache__" EXCLUDE
@@ -28,9 +28,9 @@ install(DIRECTORY locate_drink_action
 
 # Install Python scripts
 install(PROGRAMS
-  locate_drink_action/locate_drink_action_server.py
+  locate_object_action/locate_object_action_server.py
   DESTINATION lib/${PROJECT_NAME}
-  RENAME locate_drink_action_server
+  RENAME locate_object_action_server
 )
 
 # Install launch files

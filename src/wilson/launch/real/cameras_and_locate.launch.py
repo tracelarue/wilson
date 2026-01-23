@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 """
-Launch file for real robot cameras and locate drink action server.
+Launch file for real robot cameras and locate object action server.
 
 This launch file starts:
 1. Depth camera (Arducam ToF) driver
 2. V4L2 USB camera for RGB images
-3. Locate drink action server with real robot parameters
+3. locate object action server with real robot parameters
 
 Usage:
     ros2 launch wilson cameras_and_locate.launch.py
@@ -19,10 +19,10 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    """Generate launch description for cameras and locate drink action."""
+    """Generate launch description for cameras and locate object action."""
 
     # Get package directories
-    locate_drink_pkg_dir = get_package_share_directory('locate_drink_action')
+    locate_object_pkg_dir = get_package_share_directory('locate_object_action')
 
     # Depth camera (Arducam ToF) node
     depth_field = Node(
@@ -56,17 +56,17 @@ def generate_launch_description():
         ]
     )
 
-    # Locate Drink Action Server node (using real robot parameters)
-    locate_drink_params_file = os.path.join(
-        locate_drink_pkg_dir, 'config', 'locate_drink_params_real.yaml'
+    # Locate Object Action Server node (using real robot parameters)
+    locate_object_params_file = os.path.join(
+        locate_object_pkg_dir, 'config', 'locate_object_params_real.yaml'
     )
 
-    locate_drink_server_node = Node(
-        package='locate_drink_action',
-        executable='locate_drink_action_server',
-        name='locate_drink_action_server',
+    locate_object_server_node = Node(
+        package='locate_object_action',
+        executable='locate_object_action_server',
+        name='locate_object_action_server',
         output='screen',
-        parameters=[locate_drink_params_file],
+        parameters=[locate_object_params_file],
         emulate_tty=True,
     )
 
@@ -74,5 +74,5 @@ def generate_launch_description():
     return LaunchDescription([
         depth_field,
         v4l2_camera_node,
-        locate_drink_server_node,
+        locate_object_server_node,
     ])

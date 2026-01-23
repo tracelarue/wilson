@@ -7,7 +7,7 @@ float64 qy
 float64 qz
 float64 qw
 ---
-# Result - Clear message matching locate_drink format
+# Result - Clear message matching locate_object format
 bool success
 string message
 ---

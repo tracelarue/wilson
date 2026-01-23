@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Locate Drink Action Server
+Locate Object Action Server
 
 Uses Gemini AI for drink detection and positions the robot optimally
 relative to the detected drink using differential drive control.
@@ -27,7 +27,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup
 
-from locate_drink_action.action import LocateDrink
+from locate_object_action.action import LocateObject
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Twist, Point
 from visualization_msgs.msg import Marker
@@ -35,14 +35,14 @@ from std_msgs.msg import ColorRGBA
 from cv_bridge import CvBridge
 
 
-class LocateDrinkActionServer(Node):
+class LocateObjectActionServer(Node):
     """
     Action server that locates a specified drink using Gemini AI and
     positions the robot optimally using differential drive control.
     """
 
     def __init__(self):
-        super().__init__('locate_drink_action_server')
+        super().__init__('locate_object_action_server')
 
         # Load environment variables
         # Try multiple .env file locations
@@ -131,15 +131,15 @@ class LocateDrinkActionServer(Node):
         # Action server
         self._action_server = ActionServer(
             self,
-            LocateDrink,
-            'locate_drink',
+            LocateObject,
+            'locate_object',
             execute_callback=self.execute_callback,
             goal_callback=self.goal_callback,
             cancel_callback=self.cancel_callback,
             callback_group=self.callback_group
         )
 
-        self.get_logger().info('Locate Drink Action Server initialized')
+        self.get_logger().info('Locate Object Action Server initialized')
 
     def _declare_parameters(self):
         """Declare all ROS parameters with default values."""
@@ -224,7 +224,7 @@ class LocateDrinkActionServer(Node):
 
     def goal_callback(self, goal_request):
         """Handle new goal requests."""
-        self.get_logger().info(f'Received goal to locate drink: {goal_request.drinkname}')
+        self.get_logger().info(f'Received goal to locate object: {goal_request.objectname}')
         return GoalResponse.ACCEPT
 
     def cancel_callback(self, goal_handle):
@@ -234,20 +234,20 @@ class LocateDrinkActionServer(Node):
 
     async def execute_callback(self, goal_handle):
         """
-        Execute the locate drink action.
+        Execute the locate object action.
 
         Uses closed-loop control to position the robot optimally relative to the detected drink.
         """
-        self.get_logger().info(f'Executing goal: Locate {goal_handle.request.drinkname}')
+        self.get_logger().info(f'Executing goal: Locate {goal_handle.request.objectname}')
 
         # Initialize result
-        result = LocateDrink.Result()
+        result = LocateObject.Result()
         result.success = False
         result.message = ''
         result.final_position = Point(x=0.0, y=0.0, z=0.0)
 
         # Initialize feedback
-        feedback = LocateDrink.Feedback()
+        feedback = LocateObject.Feedback()
         feedback.detection_attempts = 0
 
         # Wait for camera data
@@ -283,14 +283,14 @@ class LocateDrinkActionServer(Node):
 
                 # Attempt to detect and localize the drink
                 feedback.detection_attempts += 1
-                feedback.current_status = f'Detecting {goal_handle.request.drinkname}... (attempt {feedback.detection_attempts})'
+                feedback.current_status = f'Detecting {goal_handle.request.objectname}... (attempt {feedback.detection_attempts})'
 
-                detection_result = self._detect_and_localize_drink(goal_handle.request.drinkname)
+                detection_result = self._detect_and_localize_drink(goal_handle.request.objectname)
 
                 if detection_result is None:
                     # Detection failed
                     if feedback.detection_attempts >= self.max_detection_attempts:
-                        result.message = f'Failed to detect {goal_handle.request.drinkname} after {feedback.detection_attempts} attempts'
+                        result.message = f'Failed to detect {goal_handle.request.objectname} after {feedback.detection_attempts} attempts'
                         self.get_logger().error(result.message)
                         self._stop_robot()
                         break
@@ -325,12 +325,12 @@ class LocateDrinkActionServer(Node):
                 )
 
                 # Publish RViz marker with adjusted z position
-                self._publish_marker(current_x, current_y, current_z_adjusted, goal_handle.request.drinkname)
+                self._publish_marker(current_x, current_y, current_z_adjusted, goal_handle.request.objectname)
 
                 # Check if within tolerance (separate tolerances for X and Z)
                 if abs(error_x) < self.x_tolerance and abs(error_z) < self.z_tolerance:
                     result.success = True
-                    result.message = f'Successfully positioned relative to {goal_handle.request.drinkname}'
+                    result.message = f'Successfully positioned relative to {goal_handle.request.objectname}'
                     result.final_position = Point(x=current_x, y=current_y, z=current_z_adjusted)
                     self.get_logger().info(result.message)
                     self._stop_robot()
@@ -822,7 +822,7 @@ def main(args=None):
     rclpy.init(args=args)
 
     try:
-        action_server = LocateDrinkActionServer()
+        action_server = LocateObjectActionServer()
 
         # Use MultiThreadedExecutor for concurrent callback execution
         executor = MultiThreadedExecutor()
