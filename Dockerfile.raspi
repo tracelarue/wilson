@@ -1,9 +1,6 @@
 FROM ros:humble-ros-base
 
-COPY --chown=ros:ros /boot/firmware/config.txt /boot/firmware/config.txt
-
-
-# Create a non-root user
+# Create a non-root user first (rarely changes)
 ARG USERNAME=ros
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
@@ -12,73 +9,104 @@ RUN groupadd --gid $USER_GID $USERNAME \
   && useradd -s /bin/bash --uid $USER_UID --gid $USER_GID -m $USERNAME \
   && mkdir /home/$USERNAME/.config && chown $USER_UID:$USER_GID /home/$USERNAME/.config
 
-# Set up sudo
+# Set up sudo (separate layer for better caching)
 RUN apt-get update \
   && apt-get install -y sudo \
   && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME\
   && chmod 0440 /etc/sudoers.d/$USERNAME \
   && rm -rf /var/lib/apt/lists/*
 
-# apt-get installations
-RUN apt-get update \
-  && apt-get install -y \
-  nano \
-  vim \
-  build-essential \
-  python3-scipy \
-  libportaudio2 \
-  portaudio19-dev \
-  alsa-utils \
-  ros-humble-std-msgs \
-  ros-humble-rosidl-default-generators \
-  ros-humble-rosidl-default-runtime \
-  cmake \
-  libserial-dev \
-  python3-dev \
-  python3-colcon-common-extensions \
-  python3-pip \
-  ros-humble-rviz2 \
-  libraspberrypi-bin \
-  v4l-utils \
-  ros-humble-v4l2-camera \
-  ros-humble-image-transport-plugins \
-  ros-humble-rqt-image-view \
-  ros-humble-ros2-control \
-  ros-humble-ros2-controllers \
-  ros-humble-controller-manager \
-  ros-humble-xacro \
-  ros-humble-teleop-twist-keyboard \
-  ros-humble-slam-toolbox \
-  ros-humble-twist-mux \
-  ros-humble-navigation2 \
-  ros-humble-nav2-bringup \
-  ros-humble-moveit-* \
-  libopen3d-dev \
-  ros-humble-rosbridge-server \
-  dbus-x11 \
-  at-spi2-core \
-  gnome-terminal \
-  tilix \
-  && rm -rf /var/lib/apt/lists/*
+RUN apt-get update
 
-RUN pip3 install \
-  pyserial \
-  inputs \
-  numpy==1.21.5 \
-  ArducamDepthCamera \
-  opencv-python \
-  pyaudio \
-  pysocks \
-  websocket-client \
-  google-genai \
-  pyaudio \
-  pillow \
-  mss \
-  python-dotenv \
-  exceptiongroup>=1.2.2 \
-  mcp[cli]>=1.6.0 \
-  taskgroup>=0.2.2 \
-  uv
+# Install basic system tools (rarely change)
+RUN apt-get install -y \
+    nano \
+    vim \
+    build-essential \
+    cmake \
+    python3-dev \
+    python3-pip 
+
+# Install audio and hardware libraries (medium frequency of change)
+RUN apt-get install -y \
+    python3-scipy \
+    libportaudio2 \
+    portaudio19-dev \
+    alsa-utils \
+    libserial-dev \
+    libraspberrypi-bin \
+    v4l-utils \
+    libopen3d-dev
+
+# Install ROS core packages (medium frequency of change)
+RUN apt-get install -y \
+    ros-humble-std-msgs \
+    ros-humble-rosidl-default-generators \
+    ros-humble-rosidl-default-runtime \
+    python3-colcon-common-extensions \
+    ros-humble-rviz2
+
+# Install ROS camera and media packages (medium-high frequency of change)
+RUN apt-get install -y \
+    ros-humble-v4l2-camera \
+    ros-humble-image-transport-plugins \
+    ros-humble-rqt-image-view \
+    ros-humble-rosbridge-server
+
+# Install ROS control and robot packages (higher frequency of change)
+RUN apt-get install -y \
+    ros-humble-ros2-control \
+    ros-humble-ros2-controllers \
+    ros-humble-controller-manager \
+    ros-humble-xacro \
+    ros-humble-teleop-twist-keyboard
+
+# Install ROS navigation and SLAM packages (higher frequency of change)
+RUN apt-get install -y \
+    ros-humble-slam-toolbox \
+    ros-humble-twist-mux \
+    ros-humble-navigation2 \
+    ros-humble-nav2-bringup
+
+# Install ROS MoveIt packages (higher frequency of change)
+RUN apt-get install -y \
+    ros-humble-moveit-*
+
+# Install GUI packages (can change frequently during development)
+RUN apt-get install -y \
+    dbus-x11 \
+    at-spi2-core \
+    gnome-terminal \
+    tilix \
+    ros-humble-rmw-cyclonedds-cpp
+
+# Install core Python packages (medium frequency of change)
+RUN pip3 install --no-cache-dir \
+    pyserial \
+    inputs \
+    numpy==1.21.5 \
+    opencv-python \
+    pillow \
+    python-dotenv
+
+# Install hardware-specific Python packages (medium frequency of change)
+RUN pip3 install --no-cache-dir \
+    ArducamDepthCamera \
+    pyaudio \
+    mss
+
+# Install communication Python packages (higher frequency of change)
+RUN pip3 install --no-cache-dir \
+    pysocks \
+    websocket-client \
+    google-genai
+
+# Install development and MCP packages (highest frequency of change)
+RUN pip3 install --no-cache-dir \
+    exceptiongroup>=1.2.2 \
+    mcp[cli]>=1.6.0 \
+    taskgroup>=0.2.2 \
+    uv
 
 RUN usermod -a -G dialout ${USERNAME}
 RUN usermod -a -G video ${USERNAME}

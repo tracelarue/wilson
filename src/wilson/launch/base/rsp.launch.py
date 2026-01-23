@@ -66,5 +66,5 @@ def generate_launch_description():
         
         # Nodes
         node_robot_state_publisher,
-        node_rviz2
+        #node_rviz2
     ])
