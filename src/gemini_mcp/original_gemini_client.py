@@ -429,7 +429,7 @@ class AudioLoop:
                     # Extract progress data based on action type
                     distance = None
 
-                    # Check for grab_drink feedback (current_stage and progress_percentage)
+                    # Check for grab_object feedback (current_stage and progress_percentage)
                     if "current_stage" in message or "progress_percentage" in message:
                         try:
                             # Look for 'current_stage': 'Planning motion' pattern
@@ -506,7 +506,7 @@ class AudioLoop:
                             if last_distance is None or abs(last_distance - distance) > 0.5:
                                 should_send = True
                                 print("   >>> Distance changed - will send to Gemini")
-                        # For grab_drink: always send if we have stage info
+                        # For grab_object: always send if we have stage info
                         elif "stage" in progress_data:
                             should_send = True
                             print("   >>> Stage update - will send to Gemini")

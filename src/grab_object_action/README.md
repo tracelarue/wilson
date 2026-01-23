@@ -1,4 +1,4 @@
-# Grab Drink Action Server
+# Grab Object Action Server
 
 A ROS2 action server for grabbing drinks using MoveIt Task Constructor.
 
@@ -9,7 +9,7 @@ This package provides an action server that accepts grab requests with drink coo
 ## Action Interface
 
 ### Action Name
-`grab_drink`
+`grab_object`
 
 ### Goal Message
 ```
@@ -39,7 +39,7 @@ geometry_msgs/Pose final_drink_pose      # Final drink pose in world frame
 
 ```bash
 cd ~/wilson
-colcon build --packages-select grab_drink_action
+colcon build --packages-select grab_object_action
 source install/setup.bash
 ```
 
@@ -48,14 +48,14 @@ source install/setup.bash
 ### Launch the Action Server
 
 ```bash
-ros2 launch grab_drink_action grab_drink_server.launch.py
+ros2 launch grab_object_action grab_object_server.launch.py
 ```
 
 ### Send a Goal via Command Line
 
 ```bash
-# Basic example - grab drink at x=0, y=0.1, z=0.65 in depth_camera_link_optical frame
-ros2 action send_goal /grab_drink grab_drink_action/action/GrabDrink "{
+# Basic example - grab objectat x=0, y=0.1, z=0.65 in depth_camera_link_optical frame
+ros2 action send_goal /grab_object grab_object_action/action/GrabObject "{
   targetx: 0.0,
   targety: 0.09,
   targetz: 0.65
@@ -68,16 +68,16 @@ ros2 action send_goal /grab_drink grab_drink_action/action/GrabDrink "{
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from grab_drink_action.action import GrabDrink
+from grab_object_action.action import GrabObject
 from geometry_msgs.msg import Point
 
-class GrabDrinkClient(Node):
+class GrabObjectClient(Node):
     def __init__(self):
-        super().__init__('grab_drink_client')
-        self._action_client = ActionClient(self, GrabDrink, 'grab_drink')
+        super().__init__('grab_object_client')
+        self._action_client = ActionClient(self, GrabObject, 'grab_object')
 
     def send_goal(self, x, y, z):
-        goal_msg = GrabDrink.Goal()
+        goal_msg = GrabObject.Goal()
         goal_msg.targetx = x
         goal_msg.targety = y
         goal_msg.targetz = z
@@ -113,9 +113,9 @@ class GrabDrinkClient(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    client = GrabDrinkClient()
+    client = GrabObjectClient()
 
-    # Example: Grab drink at position relative to depth camera
+    # Example: grab object at position relative to depth camera
     client.send_goal(x=0.45, y=-0.07, z=0.1, frame='depth_camera_link_optical')
 
     rclpy.spin(client)
@@ -147,7 +147,7 @@ The action server uses the following MoveIt group names (defined in the source c
 - **hand_group**: `"gripper"`
 - **hand_frame**: `"end_effector_frame"`
 
-To change these, modify the constants in [src/grab_drink_action_server.cpp](src/grab_drink_action_server.cpp:334-336).
+To change these, modify the constants in [src/grab_object_action_server.cpp](src/grab_object_action_server.cpp:334-336).
 
 ## Troubleshooting
 
@@ -155,7 +155,7 @@ To change these, modify the constants in [src/grab_drink_action_server.cpp](src/
 Make sure the action server is running and MoveIt is properly configured:
 ```bash
 ros2 action list
-# Should show: /grab_drink
+# Should show: /grab_object
 ```
 
 ### Transform errors

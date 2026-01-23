@@ -133,11 +133,11 @@ def generate_launch_description():
     # Load MoveIt configuration (adjust the package name to match your robot's MoveIt config)
     moveit_config = MoveItConfigsBuilder("wilson", package_name="wilson_moveit_config").to_moveit_configs()
 
-    # Grab Drink Action Server Node
-    grab_drink_server_node = Node(
-        package="grab_drink_action",
-        executable="grab_drink_action_server",
-        name="grab_drink_action_server",
+    # Grab Object Action Server Node
+    grab_object_server_node = Node(
+        package="grab_object_action",
+        executable="grab_object_action_server",
+        name="grab_object_action_server",
         output="screen",
         parameters=[
             moveit_config.robot_description,
@@ -148,19 +148,19 @@ def generate_launch_description():
         ],
     )
 
-    # Locate Drink Action Server Node
-    locate_drink_params_file = os.path.join(
-        get_package_share_directory('locate_drink_action'),
+    # Locate Object Action Server Node
+    locate_object_params_file = os.path.join(
+        get_package_share_directory('locate_object_action'),
         'config',
-        'locate_drink_params_sim.yaml'
+        'locate_object_params_sim.yaml'
     )
 
-    locate_drink_server_node = Node(
-        package="locate_drink_action",
-        executable="locate_drink_action_server",
-        name="locate_drink_action_server",
+    locate_object_server_node = Node(
+        package="locate_object_action",
+        executable="locate_object_action_server",
+        name="locate_object_action_server",
         output="screen",
-        parameters=[locate_drink_params_file],
+        parameters=[locate_object_params_file],
     )
 
     # Move To State Action Server Node
@@ -207,7 +207,7 @@ def generate_launch_description():
     # Action servers timer - start after move_group
     action_servers_timer = TimerAction(
         period=10.0,
-        actions=[grab_drink_server_node, locate_drink_server_node, move_to_state_server_node, navigate_to_location_server_node]
+        actions=[grab_object_server_node, locate_object_server_node, move_to_state_server_node, navigate_to_location_server_node]
     )
 
     # Teleop keyboard in separate terminal

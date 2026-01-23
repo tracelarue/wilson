@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(grab_drink_action)
+project(grab_object_action)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -19,15 +19,15 @@ find_package(rosidl_default_generators REQUIRED)
 
 # Generate action messages
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "action/GrabDrink.action"
+  "action/GrabObject.action"
   DEPENDENCIES geometry_msgs
 )
 
 # Build the action server executable
-add_executable(grab_drink_action_server src/grab_drink_action_server.cpp)
+add_executable(grab_object_action_server src/grab_object_action_server.cpp)
 
 # Specify dependencies for the executable
-ament_target_dependencies(grab_drink_action_server
+ament_target_dependencies(grab_object_action_server
   rclcpp
   rclcpp_action
   moveit_task_constructor_core
@@ -41,16 +41,16 @@ ament_target_dependencies(grab_drink_action_server
 # Link the generated action interface
 rosidl_get_typesupport_target(cpp_typesupport_target
   ${PROJECT_NAME} rosidl_typesupport_cpp)
-target_link_libraries(grab_drink_action_server "${cpp_typesupport_target}")
+target_link_libraries(grab_object_action_server "${cpp_typesupport_target}")
 
-target_include_directories(grab_drink_action_server PUBLIC
+target_include_directories(grab_object_action_server PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 
-target_compile_features(grab_drink_action_server PUBLIC c_std_99 cxx_std_17)
+target_compile_features(grab_object_action_server PUBLIC c_std_99 cxx_std_17)
 
 # Install targets
-install(TARGETS grab_drink_action_server
+install(TARGETS grab_object_action_server
   DESTINATION lib/${PROJECT_NAME})
 
 # Install launch files

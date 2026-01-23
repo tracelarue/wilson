@@ -1,10 +1,10 @@
-# locate_drink_action
+# locate_object_action
 
 ROS2 Humble action server package for robotic drink localization using Gemini AI computer vision. This package enables a differential-drive robot to detect a specified drink using camera input and position itself optimally relative to the drink.
 
 ## Overview
 
-The `locate_drink_action` package provides an action server that:
+The `locate_object_action` package provides an action server that:
 1. Uses Gemini AI to detect and localize a drink by name in camera images
 2. Calculates the 3D position of the drink relative to the camera frame
 3. Controls the robot's differential drive base to achieve optimal positioning
@@ -47,13 +47,13 @@ Get your API key from: https://aistudio.google.com/apikey
 1. Clone or copy this package to your ROS2 workspace:
    ```bash
    cd ~/wilson/src
-   # Package should be in: src/locate_drink_action/
+   # Package should be in: src/locate_object_action/
    ```
 
 2. Build the package:
    ```bash
    cd ~/wilson
-   colcon build --packages-select locate_drink_action --symlink-install
+   colcon build --packages-select locate_object_action --symlink-install
    source install/setup.bash
    ```
 
@@ -66,15 +66,15 @@ Get your API key from: https://aistudio.google.com/apikey
 source ~/wilson/install/setup.bash
 
 # Launch the action server
-ros2 launch locate_drink_action locate_drink_server.launch.py
+ros2 launch locate_object_action locate_object_server.launch.py
 ```
 
 ### Send an Action Goal
 
 Using the command line:
 ```bash
-ros2 action send_goal /locate_drink locate_drink_action/action/LocateDrink \
-  "{drinkname: 'soda'}" --feedback
+ros2 action send_goal /locate_object locate_object_action/action/LocateObject \
+  "{objectname: 'soda'}" --feedback
 ```
 
 Using Python:
@@ -82,16 +82,16 @@ Using Python:
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from locate_drink_action.action import LocateDrink
+from locate_object_action.action import LocateObject
 
-class LocateDrinkClient(Node):
+class LocateObjectClient(Node):
     def __init__(self):
-        super().__init__('locate_drink_client')
-        self._action_client = ActionClient(self, LocateDrink, 'locate_drink')
+        super().__init__('locate_object_client')
+        self._action_client = ActionClient(self, LocateObject, 'locate_object')
 
     def send_goal(self, drink_name):
-        goal_msg = LocateDrink.Goal()
-        goal_msg.drinkname = drink_name
+        goal_msg = LocateObject.Goal()
+        goal_msg.objectname = drink_name
 
         self._action_client.wait_for_server()
         self._send_goal_future = self._action_client.send_goal_async(
@@ -124,7 +124,7 @@ class LocateDrinkClient(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    client = LocateDrinkClient()
+    client = LocateObjectClient()
     client.send_goal('Sprite')
     rclpy.spin(client)
     rclpy.shutdown()
@@ -135,7 +135,7 @@ if __name__ == '__main__':
 
 ## Configuration
 
-All parameters are configurable via [config/locate_drink_params.yaml](config/locate_drink_params.yaml):
+All parameters are configurable via [config/locate_object_params.yaml](config/locate_object_params.yaml):
 
 ### Target Position Parameters
 - `target_x` (default: 0.0): Target horizontal position in meters (centered in camera view)
@@ -176,7 +176,7 @@ All parameters are configurable via [config/locate_drink_params.yaml](config/loc
 
 ### Goal
 ```
-string drinkname  # Name of the drink to locate (e.g., "Coca Cola", "Sprite", "Water bottle")
+string objectname  # Name of the drink to locate (e.g., "Coca Cola", "Sprite", "Water bottle")
 ```
 
 ### Result
@@ -226,13 +226,13 @@ To disable the override and use the actual calculated Y-coordinate, set `overrid
 - `/cmd_vel` (geometry_msgs/Twist): Velocity commands for differential drive base
 
 ### Action Servers
-- `/locate_drink` (locate_drink_action/action/LocateDrink): Main action interface
+- `/locate_object` (locate_object_action/action/LocateObject): Main action interface
 
 ## Architecture
 
 ### Detection Pipeline
 1. **Image Acquisition**: Capture synchronized RGB and depth images
-2. **AI Detection**: Send RGB image to Gemini AI with drink name
+2. **AI Detection**: Send RGB image to Gemini AI with object name
 3. **Bounding Box Extraction**: Parse JSON response for drink location
 4. **Depth Lookup**: Extract depth value at bounding box center
 5. **3D Calculation**: Project pixel coordinates to 3D using camera FOV and depth
@@ -261,7 +261,7 @@ The action server handles various failure scenarios:
 
 ### Improving Detection Accuracy
 1. Ensure good lighting conditions
-2. Use specific drink names (e.g., "red Coca Cola can" vs "drink")
+2. Use specific object names (e.g., "red Coca Cola can" vs "drink")
 3. Adjust camera position for clear view
 4. Increase `max_detection_attempts` if environment is cluttered
 
@@ -307,9 +307,9 @@ This package is designed to work with the Wilson robot system. To integrate:
 
 1. Add to Wilson's main launch file:
    ```python
-   locate_drink_server = IncludeLaunchDescription(
+   locate_object_server = IncludeLaunchDescription(
        PythonLaunchDescriptionSource([
-           os.path.join(get_package_share_directory('locate_drink_action'), 'launch', 'locate_drink_server.launch.py')
+           os.path.join(get_package_share_directory('locate_object_action'), 'launch', 'locate_object_server.launch.py')
        ]),
        launch_arguments={'use_sim_time': use_sim_time}.items()
    )
@@ -317,12 +317,12 @@ This package is designed to work with the Wilson robot system. To integrate:
 
 2. Call from Gemini AI tools:
    ```python
-   def locate_drink_tool(self, drink_name):
-       """Tool for Gemini to locate drinks."""
-       goal = LocateDrink.Goal()
-       goal.drinkname = drink_name
+   def locate_object_tool(self, drink_name):
+       """Tool for Gemini to locate objects."""
+       goal = LocateObject.Goal()
+       goal.objectname = drink_name
 
-       future = self.locate_drink_client.send_goal_async(goal)
+       future = self.locate_object_client.send_goal_async(goal)
        # Handle result...
    ```
 

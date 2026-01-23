@@ -2,7 +2,7 @@ from setuptools import setup
 from glob import glob
 import os
 
-package_name = 'locate_drink_action'
+package_name = 'locate_object_action'
 
 setup(
     name=package_name,
@@ -19,12 +19,12 @@ setup(
     zip_safe=True,
     maintainer='trace',
     maintainer_email='trace@example.com',
-    description='ROS2 action server for locating drinks using Gemini AI and positioning the robot optimally',
+    description='ROS2 action server for locating objects using Gemini AI and positioning the robot optimally',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'locate_drink_action_server = locate_drink_action.locate_drink_action_server:main',
+            'locate_object_action_server = locate_object_action.locate_object_action_server:main',
         ],
     },
 )

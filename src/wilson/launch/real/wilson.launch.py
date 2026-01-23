@@ -116,27 +116,27 @@ def generate_launch_description():
     # Load MoveIt configuration for action servers
     moveit_config = MoveItConfigsBuilder("wilson", package_name="wilson_moveit_config").to_moveit_configs()
 
-    # Locate Drink Action Server node (using real robot parameters)
-    locate_drink_params_file = os.path.join(
-        get_package_share_directory('locate_drink_action'),
+    # Locate Object Action Server node (using real robot parameters)
+    locate_object_params_file = os.path.join(
+        get_package_share_directory('locate_object_action'),
         'config',
-        'locate_drink_params_real.yaml'
+        'locate_object_params_real.yaml'
     )
 
-    locate_drink_server_node = Node(
-        package='locate_drink_action',
-        executable='locate_drink_action_server',
-        name='locate_drink_action_server',
+    locate_object_server_node = Node(
+        package='locate_object_action',
+        executable='locate_object_action_server',
+        name='locate_object_action_server',
         output='screen',
-        parameters=[locate_drink_params_file],
+        parameters=[locate_object_params_file],
         emulate_tty=True,
     )
 
-    # Grab Drink Action Server node
-    grab_drink_server_node = Node(
-        package='grab_drink_action',
-        executable='grab_drink_action_server',
-        name='grab_drink_action_server',
+    # Grab Object Action Server node
+    grab_object_server_node = Node(
+        package='grab_object_action',
+        executable='grab_object_action_server',
+        name='grab_object_action_server',
         output='screen',
         parameters=[
             moveit_config.robot_description,
@@ -164,7 +164,7 @@ def generate_launch_description():
     # Timer for action servers - start after move_group is ready
     action_servers_timer = TimerAction(
         period=13.0,
-        actions=[locate_drink_server_node, grab_drink_server_node, move_to_state_server_node]
+        actions=[locate_object_server_node, grab_object_server_node, move_to_state_server_node]
     )
 
     # Add timer to start navigation after Gazebo is ready

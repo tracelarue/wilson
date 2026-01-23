@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>locate_drink_action</name>
+  <name>locate_object_action</name>
   <version>0.0.1</version>
-  <description>ROS2 action server for locating drinks using Gemini AI and positioning the robot optimally</description>
+  <description>ROS2 action server for locating objects using Gemini AI and positioning the robot optimally</description>
   <maintainer email="trace@example.com">trace</maintainer>
   <license>MIT</license>
 
