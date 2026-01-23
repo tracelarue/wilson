@@ -47,7 +47,7 @@ def generate_launch_description():
     # Include robot state publisher
     rsp = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
-            os.path.join(pkg_path, 'launch', 'base', 'rsp.launch.py')
+            os.path.join(pkg_path, 'launch', 'base', 'sim_rsp.launch.py')
         ]),
         launch_arguments={
             'use_sim_time': use_sim_time,
