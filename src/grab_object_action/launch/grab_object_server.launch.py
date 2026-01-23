@@ -11,11 +11,11 @@ def generate_launch_description():
     # Load MoveIt configuration (adjust the package name to match your robot's MoveIt config)
     moveit_config = MoveItConfigsBuilder("wilson", package_name="wilson_moveit_config").to_moveit_configs()
 
-    # Grab Drink Action Server Node
-    grab_drink_server_node = Node(
-        package="grab_drink_action",
-        executable="grab_drink_action_server",
-        name="grab_drink_action_server",
+    # Grab Object Action Server Node
+    grab_object_server_node = Node(
+        package="grab_object_action",
+        executable="grab_object_action_server",
+        name="grab_object_action_server",
         output="screen",
         parameters=[
             moveit_config.robot_description,
@@ -38,6 +38,6 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        grab_drink_server_node,
+        grab_object_server_node,
         mtc_demo_launch,
     ])

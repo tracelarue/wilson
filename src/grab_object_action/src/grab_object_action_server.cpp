@@ -11,18 +11,18 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_eigen/tf2_eigen.hpp>
 
-#include "grab_drink_action/action/grab_drink.hpp"
+#include "grab_object_action/action/grab_object.hpp"
 
-static const rclcpp::Logger LOGGER = rclcpp::get_logger("grab_drink_action_server");
+static const rclcpp::Logger LOGGER = rclcpp::get_logger("grab_object_action_server");
 namespace mtc = moveit::task_constructor;
 
-class GrabDrinkActionServer : public rclcpp::Node {
+class GrabObjectActionServer : public rclcpp::Node {
 public:
-    using GrabDrink = grab_drink_action::action::GrabDrink;
-    using GoalHandleGrabDrink = rclcpp_action::ServerGoalHandle<GrabDrink>;
+    using GrabObject = grab_object_action::action::GrabObject;
+    using GoalHandleGrabObject = rclcpp_action::ServerGoalHandle<GrabObject>;
 
-    explicit GrabDrinkActionServer(const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
-        : Node("grab_drink_action_server", options)
+    explicit GrabObjectActionServer(const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
+        : Node("grab_object_action_server", options)
     {
         using namespace std::placeholders;
 
@@ -31,53 +31,53 @@ public:
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
         // Create action server
-        action_server_ = rclcpp_action::create_server<GrabDrink>(
+        action_server_ = rclcpp_action::create_server<GrabObject>(
             this,
-            "grab_drink",
-            std::bind(&GrabDrinkActionServer::handle_goal, this, _1, _2),
-            std::bind(&GrabDrinkActionServer::handle_cancel, this, _1),
-            std::bind(&GrabDrinkActionServer::handle_accepted, this, _1));
+            "grab_object",
+            std::bind(&GrabObjectActionServer::handle_goal, this, _1, _2),
+            std::bind(&GrabObjectActionServer::handle_cancel, this, _1),
+            std::bind(&GrabObjectActionServer::handle_accepted, this, _1));
 
-        RCLCPP_INFO(LOGGER, "Grab Drink Action Server started");
+        RCLCPP_INFO(LOGGER, "Grab Object Action Server started");
     }
 
 private:
-    rclcpp_action::Server<GrabDrink>::SharedPtr action_server_;
+    rclcpp_action::Server<GrabObject>::SharedPtr action_server_;
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
     // Action server callbacks
     rclcpp_action::GoalResponse handle_goal(
         const rclcpp_action::GoalUUID& uuid,
-        std::shared_ptr<const GrabDrink::Goal> goal)
+        std::shared_ptr<const GrabObject::Goal> goal)
     {
         (void)uuid;
-        RCLCPP_INFO(LOGGER, "Received goal request for drink at position [%.3f, %.3f, %.3f] in depth_camera_link_optical frame",
+        RCLCPP_INFO(LOGGER, "Received goal request for object at position [%.3f, %.3f, %.3f] in depth_camera_link_optical frame",
                     goal->targetx, goal->targety, goal->targetz);
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     }
 
     rclcpp_action::CancelResponse handle_cancel(
-        const std::shared_ptr<GoalHandleGrabDrink> goal_handle)
+        const std::shared_ptr<GoalHandleGrabObject> goal_handle)
     {
         RCLCPP_INFO(LOGGER, "Received request to cancel goal");
         (void)goal_handle;
         return rclcpp_action::CancelResponse::ACCEPT;
     }
 
-    void handle_accepted(const std::shared_ptr<GoalHandleGrabDrink> goal_handle)
+    void handle_accepted(const std::shared_ptr<GoalHandleGrabObject> goal_handle)
     {
         using namespace std::placeholders;
         // Spawn a new thread to avoid blocking the executor
-        std::thread{std::bind(&GrabDrinkActionServer::execute, this, _1), goal_handle}.detach();
+        std::thread{std::bind(&GrabObjectActionServer::execute, this, _1), goal_handle}.detach();
     }
 
-    void execute(const std::shared_ptr<GoalHandleGrabDrink> goal_handle)
+    void execute(const std::shared_ptr<GoalHandleGrabObject> goal_handle)
     {
         RCLCPP_INFO(LOGGER, "Executing goal");
         const auto goal = goal_handle->get_goal();
-        auto feedback = std::make_shared<GrabDrink::Feedback>();
-        auto result = std::make_shared<GrabDrink::Result>();
+        auto feedback = std::make_shared<GrabObject::Feedback>();
+        auto result = std::make_shared<GrabObject::Result>();
 
         try {
             // Transform target position to world frame
@@ -107,7 +107,7 @@ private:
             RCLCPP_INFO(LOGGER, "Transformed position to base_link frame: [%.3f, %.3f, %.3f]",
                         target_point_out.point.x, target_point_out.point.y, target_point_out.point.z);
 
-            // Set up planning scene with drink at transformed position
+            // Set up planning scene with object at transformed position
             feedback->current_stage = "Setting up planning scene";
             feedback->progress_percentage = 10.0;
             goal_handle->publish_feedback(feedback);
@@ -171,8 +171,8 @@ private:
             goal_handle->publish_feedback(feedback);
 
             result->success = true;
-            result->message = "Successfully grabbed drink";
-            // Final drink pose not needed in result
+            result->message = "Successfully grabbed object";
+            // Final object pose not needed in result
 
             goal_handle->succeed(result);
             RCLCPP_INFO(LOGGER, "Goal succeeded");
@@ -187,16 +187,16 @@ private:
 
     void setupPlanningScene(const geometry_msgs::msg::Point& position)
     {
-        // Hardcoded drink dimensions (standard can size)
-        const float drink_height = 0.122;
-        const float drink_radius = 0.033;
+        // Hardcoded object dimensions (standard can size)
+        const float object_height = 0.122;
+        const float object_radius = 0.033;
 
         moveit_msgs::msg::CollisionObject object;
-        object.id = "drink";
+        object.id = "object";
         object.header.frame_id = "base_link";
         object.primitives.resize(1);
         object.primitives[0].type = shape_msgs::msg::SolidPrimitive::CYLINDER;
-        object.primitives[0].dimensions = { drink_height, drink_radius };
+        object.primitives[0].dimensions = { object_height, object_radius };
 
         geometry_msgs::msg::Pose pose;
         pose.position = position;
@@ -206,11 +206,11 @@ private:
         moveit::planning_interface::PlanningSceneInterface psi;
         psi.applyCollisionObject(object);
 
-        RCLCPP_INFO(LOGGER, "Added drink collision object at [%.3f, %.3f, %.3f] with height %.3f and radius %.3f",
-                    position.x, position.y, position.z, drink_height, drink_radius);
+        RCLCPP_INFO(LOGGER, "Added object collision object at [%.3f, %.3f, %.3f] with height %.3f and radius %.3f",
+                    position.x, position.y, position.z, object_height, object_radius);
     }
 
-    geometry_msgs::msg::Vector3Stamped computeApproachVector(const geometry_msgs::msg::Point& drink_position)
+    geometry_msgs::msg::Vector3Stamped computeApproachVector(const geometry_msgs::msg::Point& object_position)
     {
         geometry_msgs::msg::Vector3Stamped approach_vec;
         approach_vec.header.frame_id = "base_link";
@@ -230,10 +230,10 @@ private:
             geometry_msgs::msg::TransformStamped transform =
                 tf_buffer_->lookupTransform("base_link", "link_1", tf2::TimePointZero);
 
-            // Compute vector from link_1 to drink
-            double dx = drink_position.x - transform.transform.translation.x;
-            double dy = drink_position.y - transform.transform.translation.y;
-            double dz = drink_position.z - transform.transform.translation.z;
+            // Compute vector from link_1 to object
+            double dx = object_position.x - transform.transform.translation.x;
+            double dy = object_position.y - transform.transform.translation.y;
+            double dz = object_position.z - transform.transform.translation.z;
 
             // Normalize the vector (ignore Z component for planar approach)
             double length = std::sqrt(dx*dx + dy*dy + dz*dz);
@@ -242,7 +242,7 @@ private:
                 approach_vec.vector.y = 0.0; //dy / length; // Re-enable for dynamic x approach
                 approach_vec.vector.z = -1.0;
             } else {
-                RCLCPP_WARN(LOGGER, "Base link and drink are at same position, using default X direction");
+                RCLCPP_WARN(LOGGER, "Base link and object are at same position, using default X direction");
                 approach_vec.vector.x = 1.0;
                 approach_vec.vector.y = 0.0;
                 approach_vec.vector.z = 0.0;
@@ -267,8 +267,8 @@ private:
         const mtc::SolutionBase& solution,
         moveit::planning_interface::MoveGroupInterface& move_group,
         moveit::planning_interface::MoveGroupInterface& gripper,
-        const std::shared_ptr<GoalHandleGrabDrink>& goal_handle,
-        std::shared_ptr<GrabDrink::Feedback>& feedback,
+        const std::shared_ptr<GoalHandleGrabObject>& goal_handle,
+        std::shared_ptr<GrabObject::Feedback>& feedback,
         double& progress_percentage)
     {
         // Check if this is a SubTrajectory (leaf node)
@@ -307,13 +307,13 @@ private:
                 feedback->current_stage = "Opening gripper";
             } else if (stage_name.find("approach") != std::string::npos) {
                 progress_percentage = 80.0;
-                feedback->current_stage = "Approaching drink";
+                feedback->current_stage = "Approaching object";
             } else if (stage_name.find("close hand") != std::string::npos) {
                 progress_percentage = 85.0;
-                feedback->current_stage = "Closing gripper on drink";
+                feedback->current_stage = "Closing gripper on object";
             } else if (stage_name.find("lift") != std::string::npos) {
                 progress_percentage = 90.0;
-                feedback->current_stage = "Lifting drink";
+                feedback->current_stage = "Lifting object";
             } else if (stage_name.find("return") != std::string::npos || stage_name.find("home") != std::string::npos) {
                 progress_percentage = 95.0;
                 feedback->current_stage = "Returning to home position";
@@ -370,12 +370,12 @@ private:
         return moveit::core::MoveItErrorCode::SUCCESS;
     }
 
-    mtc::Task createTask(const geometry_msgs::msg::Point& drink_position,
-                        const std::shared_ptr<GoalHandleGrabDrink>& goal_handle,
-                        std::shared_ptr<GrabDrink::Feedback>& feedback)
+    mtc::Task createTask(const geometry_msgs::msg::Point& object_position,
+                        const std::shared_ptr<GoalHandleGrabObject>& goal_handle,
+                        std::shared_ptr<GrabObject::Feedback>& feedback)
     {
         mtc::Task task;
-        task.stages()->setName("grab drink task");
+        task.stages()->setName("grab objecttask");
         task.loadRobotModel(shared_from_this());
 
         const auto& arm_group_name = "arm";
@@ -442,23 +442,23 @@ private:
             task.add(std::move(stage_move_to_grab));
         }
 
-        // Grab Drink
+        // Grab Object
         {
-            auto grasp = std::make_unique<mtc::SerialContainer>("grab drink");
+            auto grasp = std::make_unique<mtc::SerialContainer>("grab object");
             task.properties().exposeTo(grasp->properties(), { "eef", "group", "ik_frame" });
             grasp->properties().configureInitFrom(mtc::Stage::PARENT, { "eef", "group", "ik_frame" });
 
-            // Approach Drink
+            // Approach object
             {
                 auto stage =
-                    std::make_unique<mtc::stages::MoveRelative>("approach drink", cartesian_planner);
-                stage->properties().set("marker_ns", "approach_drink");
+                    std::make_unique<mtc::stages::MoveRelative>("approach object", cartesian_planner);
+                stage->properties().set("marker_ns", "approach_object");
                 stage->properties().set("link", hand_frame);
                 stage->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
                 stage->setMinMaxDistance(0.0, 0.1);
 
                 // Compute approach direction dynamically
-                geometry_msgs::msg::Vector3Stamped vec = computeApproachVector(drink_position);
+                geometry_msgs::msg::Vector3Stamped vec = computeApproachVector(object_position);
                 stage->setDirection(vec);
                 grasp->insert(std::move(stage));
             }
@@ -469,7 +469,7 @@ private:
                 stage->properties().configureInitFrom(mtc::Stage::PARENT);
                 stage->properties().set("marker_ns", "grasp_pose");
                 stage->setPreGraspPose("open");
-                stage->setObject("drink");
+                stage->setObject("object");
                 stage->setAngleDelta(M_PI / 12);
                 stage->setMonitoredStage(current_state_ptr);
 
@@ -494,10 +494,10 @@ private:
                 grasp->insert(std::move(wrapper));
             }
 
-            // Allow Collision (hand, drink)
+            // Allow Collision (hand, object)
             {
-                auto stage = std::make_unique<mtc::stages::ModifyPlanningScene>("allow collision (hand,drink)");
-                stage->allowCollisions("drink",
+                auto stage = std::make_unique<mtc::stages::ModifyPlanningScene>("allow collision (hand,object)");
+                stage->allowCollisions("object",
                     task.getRobotModel()->getJointModelGroup(hand_group_name)->getLinkModelNamesWithCollisionGeometry(),
                     true);
                 grasp->insert(std::move(stage));
@@ -511,20 +511,20 @@ private:
                 grasp->insert(std::move(stage));
             }
 
-            // Attach Drink
+            // Attach object
             {
-                auto stage = std::make_unique<mtc::stages::ModifyPlanningScene>("attach drink");
-                stage->attachObject("drink", hand_frame);
+                auto stage = std::make_unique<mtc::stages::ModifyPlanningScene>("attach object");
+                stage->attachObject("object", hand_frame);
                 grasp->insert(std::move(stage));
             }
 
-            // Lift Drink
+            // Lift object
             {
-                auto stage = std::make_unique<mtc::stages::MoveRelative>("lift drink", cartesian_planner);
+                auto stage = std::make_unique<mtc::stages::MoveRelative>("lift object", cartesian_planner);
                 stage->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
                 stage->setMinMaxDistance(0.0, 0.1);
                 stage->setIKFrame(hand_frame);
-                stage->properties().set("marker_ns", "lift_drink");
+                stage->properties().set("marker_ns", "lift_object");
 
                 // Set upward direction
                 geometry_msgs::msg::Vector3Stamped vec;
@@ -556,7 +556,7 @@ int main(int argc, char** argv)
     rclcpp::NodeOptions options;
     options.automatically_declare_parameters_from_overrides(true);
 
-    auto action_server_node = std::make_shared<GrabDrinkActionServer>(options);
+    auto action_server_node = std::make_shared<GrabObjectActionServer>(options);
 
     rclcpp::executors::MultiThreadedExecutor executor;
     executor.add_node(action_server_node);

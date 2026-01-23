@@ -132,11 +132,11 @@ def generate_launch_description():
         emulate_tty=True,
     )
 
-    # Grab Drink Action Server node
-    grab_drink_server_node = Node(
-        package='grab_drink_action',
-        executable='grab_drink_action_server',
-        name='grab_drink_action_server',
+    # Grab Object Action Server node
+    grab_object_server_node = Node(
+        package='grab_object_action',
+        executable='grab_object_action_server',
+        name='grab_object_action_server',
         output='screen',
         parameters=[
             moveit_config.robot_description,
@@ -164,7 +164,7 @@ def generate_launch_description():
     # Timer for action servers - start after move_group is ready
     action_servers_timer = TimerAction(
         period=13.0,
-        actions=[locate_drink_server_node, grab_drink_server_node, move_to_state_server_node]
+        actions=[locate_drink_server_node, grab_object_server_node, move_to_state_server_node]
     )
 
     # Add timer to start navigation after Gazebo is ready

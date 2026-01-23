@@ -35,7 +35,7 @@ This launches in the following sequence:
 2. Nav2 navigation stack (3s delay)
 3. AMCL localization (5s delay)
 4. MoveIt move_group (8s delay)
-5. GrabDrinkActionServer (8s delay)
+5. GrabObjectActionServer (8s delay)
 6. Initial pose publisher (15s delay)
 
 ### Launch Real Robot
@@ -51,8 +51,8 @@ ros2 launch wilson navigation_launch.py
 # Test manipulation only
 ros2 launch wilson move_group.launch.py
 
-# Test grab drink action server
-ros2 launch grab_drink_action grab_drink_server.launch.py
+# Test grab objectaction server
+ros2 launch grab_object_action grab_object_server.launch.py
 
 # Test Gemini AI node (requires GOOGLE_API_KEY in .env)
 ros2 run gemini gemini_node
@@ -75,8 +75,8 @@ ros2 topic echo /joint_states --once
 # Send navigation goal (map frame)
 ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose "{pose: {header: {frame_id: 'map'}, pose: {position: {x: -2.0, y: -2.5, z: 0.0}}}}" --feedback
 
-# Send grab drink goal (depth camera frame)
-ros2 action send_goal /grab_drink grab_drink_action/action/GrabDrink "{target_position: {x: 0.45, y: -0.07, z: 0.1}, target_frame: 'depth_camera_link_optical'}" --feedback
+# Send grab objectgoal (depth camera frame)
+ros2 action send_goal /grab_object grab_object_action/action/GrabObject "{target_position: {x: 0.45, y: -0.07, z: 0.1}, target_frame: 'depth_camera_link_optical'}" --feedback
 ```
 
 ## High-Level Architecture
@@ -113,7 +113,7 @@ ros2 action send_goal /grab_drink grab_drink_action/action/GrabDrink "{target_po
 
 - **wilson**: Main robot description (URDF), launch files, maps, configurations
 - **wilson_moveit_config**: MoveIt configuration (kinematics, joint limits, controllers)
-- **grab_drink_action**: MTC-based grasp action server for drink manipulation
+- **grab_object_action**: MTC-based grasp action server for drink manipulation
 - **gemini**: Gemini Live API integration node with ROS2 action clients
 - **depth_cam**: Arducam ToF camera driver
 - **diffdrive_arduino**: Differential drive base hardware interface
@@ -132,7 +132,7 @@ map (from map server)
 
 **Action Interfaces:**
 - `/navigate_to_pose`: Nav2 navigation action (map frame)
-- `/grab_drink`: Custom grasp action (any frame, typically depth_camera_link_optical)
+- `/grab_object`: Custom grasp action (any frame, typically depth_camera_link_optical)
 
 **Topic Flow:**
 - Sensors → `/scan`, `/camera/image_raw`, `/camera/depth/image_raw`
@@ -144,7 +144,7 @@ map (from map server)
 
 1. **Timing Dependencies**: The launch file uses staged delays to prevent race conditions. Do not remove timers without understanding service availability dependencies.
 
-2. **Transform Management**: All coordinate transformations go through TF2. Never bypass TF for coordinate conversions. The grab_drink action automatically handles frame transformations.
+2. **Transform Management**: All coordinate transformations go through TF2. Never bypass TF for coordinate conversions. The grab_object action automatically handles frame transformations.
 
 3. **Controller Namespaces**:
    - Simulation uses parameters from `gazebo_controller_manager.yaml`
@@ -152,7 +152,7 @@ map (from map server)
    - Launch argument `use_fake_hardware` switches between them
 
 4. **MoveIt Integration**:
-   - The `grab_drink_action` requires MoveIt's `move_group` node to be running
+   - The `grab_object_action` requires MoveIt's `move_group` node to be running
    - Planning scene is dynamically updated with detected objects
    - Collision checking can be selectively disabled (e.g., gripper-object collision during grasp)
 
