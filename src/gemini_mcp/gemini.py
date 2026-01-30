@@ -766,7 +766,6 @@ class AudioLoop:
                 await self.session.send_realtime_input(
                     media={"data": keepalive_audio, "mime_type": "audio/pcm"}
                 )
-                print("🔄 Sent WebSocket keepalive")
             except asyncio.CancelledError:
                 # Task was cancelled, exit gracefully
                 break
@@ -875,24 +874,24 @@ class AudioLoop:
                                 pass
 
                         # Handle text responses
-                        if part.text:
-                            text_content = part.text
-                            if first_text:
-                                print(f"\n🤖 > {text_content}", end="", flush=True)
-                                first_text = False
-                            else:
-                                print(text_content, end="", flush=True)
-                            turn_text += text_content
-                    continue
-
-                # Fallback: Handle text responses from Gemini (for backward compatibility)
-                if text_content := response.text:
-                    if first_text:
-                        print(f"\n🤖 > {text_content}", end="", flush=True)
-                        first_text = False
-                    else:
-                        print(text_content, end="", flush=True)
-                    turn_text += text_content
+#                        if part.text:
+#                            text_content = part.text
+#                            if first_text:
+#                                print(f"\n🤖 > {text_content}", end="", flush=True)
+#                                first_text = False
+#                            else:
+#                                print(text_content, end="", flush=True)
+#                            turn_text += text_content
+#                    continue
+#
+#                # Fallback: Handle text responses from Gemini (for backward compatibility)
+#                if text_content := response.text:
+#                    if first_text:
+#                        print(f"\n🤖 > {text_content}", end="", flush=True)
+#                        first_text = False
+#                    else:
+#                        print(text_content, end="", flush=True)
+#                    turn_text += text_content
 
                 # Handle server content (currently disabled)
                 """
@@ -1156,7 +1155,7 @@ class AudioLoop:
                         self.session = session
 
                         # Initialize communication queues
-                        self.audio_in_queue = asyncio.Queue(maxsize=50)  # Audio from Gemini (buffer for smooth playback)
+                        self.audio_in_queue = asyncio.Queue(maxsize=400)  # Audio from Gemini (buffer for smooth playback)
                         self.out_queue = asyncio.Queue(maxsize=3)  # Data to Gemini (small buffer for low latency)
 
                         # Start all async tasks
