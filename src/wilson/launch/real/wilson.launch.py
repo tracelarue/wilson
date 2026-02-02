@@ -239,12 +239,12 @@ def generate_launch_description():
         declare_initial_pose_yaw,
         robot_launch,
         move_group_timer,
-        nav2_timer,
-        localization_timer,
-        action_servers_timer,
+        #nav2_timer,
+        #localization_timer,
+        #action_servers_timer,
         #gemini,
-        teleop,
-        rosbridge_timer
+        #teleop,
+        #rosbridge_timer
         #gemini_ros_mcp_timer,
         #initial_pose_timer
     ])

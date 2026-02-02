@@ -6,9 +6,13 @@
 #include <libserial/SerialPort.h>
 #include <rclcpp_lifecycle/state.hpp>
 #include <rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp>
+#include <sensor_msgs/msg/magnetic_field.hpp>
+#include <rclcpp/publisher.hpp>
 
 #include <vector>
 #include <string>
+#include <thread>
+#include <memory>
 
 
 namespace arduinobot_controller
@@ -39,6 +43,21 @@ private:
   std::vector<double> position_commands_;
   std::vector<double> prev_position_commands_;
   std::vector<double> position_states_;
+
+  // ROS2 publishing for MLX sensor
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::Publisher<sensor_msgs::msg::MagneticField>::SharedPtr mlx_publisher_;
+  std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
+  std::thread executor_thread_;
+  bool executor_running_ = false;
+
+  // MLX sensor readings
+  double mlx_x_;
+  double mlx_y_;
+  double mlx_z_;
+
+  // Helper method
+  bool parseMLXData(const std::string& line);
 };
 }  // namespace arduinobot_controller
 

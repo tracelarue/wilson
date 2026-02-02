@@ -4,6 +4,7 @@
 #include <thread>
 #include <chrono>
 #include <sstream>
+#include <vector>
 
 
 namespace arduinobot_controller
@@ -29,6 +30,13 @@ ArduinobotInterface::ArduinobotInterface()
 
 ArduinobotInterface::~ArduinobotInterface()
 {
+  // Stop executor thread
+  executor_running_ = false;
+  if (executor_thread_.joinable())
+  {
+    executor_thread_.join();
+  }
+
   if (arduino_.IsOpen())
   {
     try
@@ -76,10 +84,44 @@ CallbackReturn ArduinobotInterface::on_init(const hardware_interface::HardwareIn
     position_commands_[i] = initial_positions[i];
     position_states_[i] = initial_positions[i];
     prev_position_commands_[i] = initial_positions[i];
-    
-    RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), 
-               "Joint %s initial position: %f rad", 
+
+    RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"),
+               "Joint %s initial position: %f rad",
                info_.joints[i].name.c_str(), initial_positions[i]);
+  }
+
+  // Initialize MLX sensor values
+  mlx_x_ = 0.0;
+  mlx_y_ = 0.0;
+  mlx_z_ = 0.0;
+
+  // Create ROS2 node and publisher for MLX sensor
+  try
+  {
+    node_ = rclcpp::Node::make_shared("arduinobot_mlx_publisher");
+    mlx_publisher_ = node_->create_publisher<sensor_msgs::msg::MagneticField>(
+        "/mlx", 10);
+
+    // Create executor and start spinning thread
+    executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+    executor_->add_node(node_);
+    executor_running_ = true;
+
+    executor_thread_ = std::thread([this]() {
+      while (executor_running_)
+      {
+        executor_->spin_some(std::chrono::milliseconds(10));
+      }
+    });
+
+    RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"),
+                "MLX sensor publisher initialized on topic /mlx");
+  }
+  catch (const std::exception& e)
+  {
+    RCLCPP_ERROR_STREAM(rclcpp::get_logger("ArduinobotInterface"),
+                        "Failed to initialize MLX publisher: " << e.what());
+    return CallbackReturn::FAILURE;
   }
 
   return CallbackReturn::SUCCESS;
@@ -149,6 +191,18 @@ CallbackReturn ArduinobotInterface::on_deactivate(const rclcpp_lifecycle::State 
 {
   RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), "Stopping robot hardware ...");
 
+  // Stop executor
+  executor_running_ = false;
+  if (executor_)
+  {
+    executor_->cancel();
+  }
+
+  if (executor_thread_.joinable())
+  {
+    executor_thread_.join();
+  }
+
   if (arduino_.IsOpen())
   {
     try
@@ -172,16 +226,38 @@ hardware_interface::return_type ArduinobotInterface::read(const rclcpp::Time &ti
 {
   // Open Loop Control - assuming the robot is always where we command to be
   position_states_ = position_commands_;
-  
-  // Debug: Log the current state being reported
-  //static int log_counter = 0;
-  //if (++log_counter % 100 == 0) { // Log every 100 reads to avoid spam
-  //  RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), 
-  //              "Current state: j1=%.3f, j2=%.3f, j3=%.3f, j4=%.3f, gripper=%.3f",
-  //              position_states_[0], position_states_[1], position_states_[2], 
-  //              position_states_[3], position_states_[4]);
-  //}
-  
+
+  // Read available data from serial port (non-blocking)
+  if (arduino_.IsOpen() && arduino_.IsDataAvailable())
+  {
+    try
+    {
+      std::string line;
+      arduino_.ReadLine(line, '\n', 10); // 10ms timeout
+
+      // Try to parse as MLX sensor data
+      if (parseMLXData(line) && mlx_publisher_)
+      {
+        // Publish sensor data
+        auto msg = sensor_msgs::msg::MagneticField();
+        msg.header.stamp = time;
+        msg.header.frame_id = "end_effector_frame"; // Sensor mounted on end effector
+
+        // MLX90393 outputs in microTesla (µT)
+        msg.magnetic_field.x = mlx_x_;
+        msg.magnetic_field.y = mlx_y_;
+        msg.magnetic_field.z = mlx_z_;
+
+        mlx_publisher_->publish(msg);
+      }
+    }
+    catch (const std::exception& e)
+    {
+      // Non-critical: just skip this read if parsing fails
+      // Don't spam logs - sensor reads happen at 100Hz control rate
+    }
+  }
+
   return hardware_interface::return_type::OK;
 }
 
@@ -246,6 +322,49 @@ hardware_interface::return_type ArduinobotInterface::write(const rclcpp::Time &t
   prev_position_commands_ = position_commands_;
 
   return hardware_interface::return_type::OK;
+}
+
+bool ArduinobotInterface::parseMLXData(const std::string& line)
+{
+  // MLX sensor data format: "x,y,z\n" (3 comma-separated values)
+  // Position response format: "base,shoulder,elbow,wrist,gripper\n" (5 values)
+
+  std::istringstream iss(line);
+  std::string token;
+  std::vector<double> values;
+
+  // Parse comma-separated values
+  while (std::getline(iss, token, ','))
+  {
+    try
+    {
+      values.push_back(std::stod(token));
+    }
+    catch (...)
+    {
+      return false; // Invalid numeric value
+    }
+  }
+
+  // MLX data has exactly 3 values
+  if (values.size() == 3)
+  {
+    mlx_x_ = values[0];
+    mlx_y_ = values[1];
+    mlx_z_ = values[2];
+
+    // DEBUG: Log parsed values
+    static int log_count = 0;
+    if (++log_count % 10 == 0)  // Log every 10 readings to avoid spam
+    {
+      RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"),
+                  "MLX parsed: x=%.2f, y=%.2f, z=%.2f", mlx_x_, mlx_y_, mlx_z_);
+    }
+
+    return true;
+  }
+
+  return false; // Not MLX data (could be position response with 5 values)
 }
 }  // namespace arduinobot_controller
 
