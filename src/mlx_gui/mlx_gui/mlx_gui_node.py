@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+"""
+MLX GUI Node - Live visualization of MLX90393 magnetometer data.
+
+TO EDIT FORCE CALCULATION FORMULAS:
+    Find the methods `calculate_grip_force()` and `calculate_downforce()`
+    in the MLXLiveGUI class (around line 30-60). Edit the formulas there
+    to change how grip force and downforce are calculated from X, Y, Z values.
+"""
 
 import rclpy
 from rclpy.node import Node
@@ -21,6 +29,56 @@ from matplotlib.figure import Figure
 
 class MLXLiveGUI:
     """Tkinter GUI for live visualization of MLX90393 magnetometer data from ROS2 /mlx topic."""
+
+    # ============================================================================
+    # FORCE CALCULATION FORMULAS - EDIT THESE TO CHANGE CALCULATIONS
+    # ============================================================================
+
+    @staticmethod
+    def calculate_grip_force(x, y, z):
+        """
+        Calculate grip force from magnetic field values.
+
+        Args:
+            x, y, z: Magnetic field values in µT (after tare)
+
+        Returns:
+            Grip force in Newtons
+
+        EDIT THIS FORMULA as needed for your calibration.
+        """
+        # Calibrated polynomial formula for grip force
+        grip_force = (
+            (-0.233304) * x +
+            (0.128798) * y +
+            (1.75378) * z +
+            (0.000175423) * x**2 +
+            (8.41809e-08) * x * y +
+            (0.00013915) * x * z +
+            (0.000156242) * y**2 +
+            (2.84164e-05) * y * z +
+            (0.000266599) * z**2
+        ) / 40
+        return grip_force
+
+    @staticmethod
+    def calculate_downforce(x, y, z):
+        """
+        Calculate downward force from magnetic field values.
+
+        Args:
+            x, y, z: Magnetic field values in µT (after tare)
+
+        Returns:
+            Downward force in Newtons
+
+        EDIT THIS FORMULA as needed for your calibration.
+        """
+        # Simple linear formula for downforce
+        downforce = x / 40
+        return downforce
+
+    # ============================================================================
 
     def __init__(self, root, ros_node, data_queue, history_seconds=5.0):
         self.plot_frame = None
@@ -52,6 +110,15 @@ class MLXLiveGUI:
         self.X_sma = deque()
         self.Y_sma = deque()
         self.Z_sma = deque()
+
+        # Force calculation buffers
+        self.grip_force = deque()
+        self.downforce = deque()
+        self.grip_force_sma = deque()
+        self.downforce_sma = deque()
+
+        self.min_y_force = -1
+        self.max_y_force = 1
 
         # Capture state
         self.capture_active = False
@@ -219,11 +286,11 @@ class MLXLiveGUI:
         self.plot_frame.rowconfigure(0, weight=1)
         self.plot_frame.columnconfigure(0, weight=1)
 
-        self.fig = Figure(figsize=(10, 5), dpi=100)
+        self.fig = Figure(figsize=(10, 8), dpi=100)
         self.fig.patch.set_facecolor("#f4f5f7")
 
-        # Single plot for raw magnetic field
-        self.ax_raw = self.fig.add_subplot(111)
+        # Top plot: Raw magnetic field
+        self.ax_raw = self.fig.add_subplot(211)
         self.ax_raw.set_facecolor("#f7f7f7")
         self.ax_raw.grid(axis="y", color="#cccccc", linewidth=0.5, alpha=0.35)
         self.ax_raw.spines["top"].set_visible(False)
@@ -232,8 +299,8 @@ class MLXLiveGUI:
         self.ax_raw.spines["bottom"].set_color("#888888")
         self.ax_raw.tick_params(colors="#444444")
         self.ax_raw.set_title("Magnetic Field (last {:.1f} s)".format(self.history_seconds))
-        self.ax_raw.set_xlabel("Time (s)")
         self.ax_raw.set_ylabel("Field (µT)")
+        self.ax_raw.tick_params(labelbottom=False)
 
         self.text_overlay_raw = self.ax_raw.text(
             0.02, 0.98, "",
@@ -244,7 +311,7 @@ class MLXLiveGUI:
                       alpha=0.6, edgecolor="#cccccc"),
         )
 
-        # Plot lines
+        # Raw plot lines
         self.shadowX_raw, = self.ax_raw.plot([], [], linewidth=4, alpha=0.10)
         self.shadowY_raw, = self.ax_raw.plot([], [], linewidth=4, alpha=0.10)
         self.shadowZ_raw, = self.ax_raw.plot([], [], linewidth=4, alpha=0.10)
@@ -253,6 +320,36 @@ class MLXLiveGUI:
         self.line_z_raw, = self.ax_raw.plot([], [], label="Z", linewidth=2.5)
         self.ax_raw.legend(loc="upper right", frameon=False)
 
+        # Bottom plot: Force measurements
+        self.ax_force = self.fig.add_subplot(212, sharex=self.ax_raw)
+        self.ax_force.set_facecolor("#f7f7f7")
+        self.ax_force.grid(axis="y", color="#cccccc", linewidth=0.5, alpha=0.35)
+        self.ax_force.spines["top"].set_visible(False)
+        self.ax_force.spines["right"].set_visible(False)
+        self.ax_force.spines["left"].set_color("#888888")
+        self.ax_force.spines["bottom"].set_color("#888888")
+        self.ax_force.tick_params(colors="#444444")
+        self.ax_force.set_title("Force Measurements")
+        self.ax_force.set_xlabel("Time (s)")
+        self.ax_force.set_ylabel("Force (N)")
+
+        self.text_overlay_force = self.ax_force.text(
+            0.02, 0.98, "",
+            transform=self.ax_force.transAxes,
+            va="top", ha="left",
+            fontsize=11, fontfamily="Consolas", color="#222222",
+            bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
+                      alpha=0.6, edgecolor="#cccccc"),
+        )
+
+        # Force plot lines
+        self.shadow_grip, = self.ax_force.plot([], [], linewidth=4, alpha=0.10)
+        self.shadow_down, = self.ax_force.plot([], [], linewidth=4, alpha=0.10)
+        self.line_grip, = self.ax_force.plot([], [], label="Grip Force", linewidth=2.5)
+        self.line_down, = self.ax_force.plot([], [], label="Downforce", linewidth=2.5)
+        self.ax_force.legend(loc="upper right", frameon=False)
+
+        self.fig.tight_layout()
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.plot_frame)
         self.canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
 
@@ -370,6 +467,23 @@ class MLXLiveGUI:
             self.Y_sma.append(sma_y)
             self.Z_sma.append(sma_z)
 
+            # Calculate forces using the formulas
+            grip = self.calculate_grip_force(x, y, z)
+            down = self.calculate_downforce(x, y, z)
+
+            self.grip_force.append(grip)
+            self.downforce.append(down)
+
+            # SMA for forces
+            grips = list(self.grip_force)[-window:] if len(self.grip_force) > window else list(self.grip_force)
+            downs = list(self.downforce)[-window:] if len(self.downforce) > window else list(self.downforce)
+
+            sma_grip = sum(grips) / len(grips) if grips else grip
+            sma_down = sum(downs) / len(downs) if downs else down
+
+            self.grip_force_sma.append(sma_grip)
+            self.downforce_sma.append(sma_down)
+
         # Trim to history window
         if updated:
             cutoff = time.time() - self.history_seconds
@@ -381,6 +495,10 @@ class MLXLiveGUI:
                 self.X_sma.popleft()
                 self.Y_sma.popleft()
                 self.Z_sma.popleft()
+                self.grip_force.popleft()
+                self.downforce.popleft()
+                self.grip_force_sma.popleft()
+                self.downforce_sma.popleft()
 
     def _update_plot(self):
         """Update matplotlib canvas with current data."""
@@ -400,7 +518,7 @@ class MLXLiveGUI:
             Y_disp = self.Y_raw
             Z_disp = self.Z_raw
 
-        # Update lines
+        # Update raw magnetic field lines
         self.line_x_raw.set_data(t_rel, X_disp)
         self.line_y_raw.set_data(t_rel, Y_disp)
         self.line_z_raw.set_data(t_rel, Z_disp)
@@ -409,7 +527,7 @@ class MLXLiveGUI:
         self.shadowY_raw.set_data(t_rel, Y_disp)
         self.shadowZ_raw.set_data(t_rel, Z_disp)
 
-        # Update text overlay
+        # Update text overlay for raw data
         if X_disp and Y_disp and Z_disp:
             self.text_overlay_raw.set_text(
                 f"X: {X_disp[-1]:6.2f} µT\n"
@@ -417,7 +535,7 @@ class MLXLiveGUI:
                 f"Z: {Z_disp[-1]:6.2f} µT"
             )
 
-        # Update axis limits
+        # Update raw axis limits
         self.ax_raw.set_xlim(0, self.history_seconds)
 
         all_raw = (*X_disp, *Y_disp, *Z_disp)
@@ -433,6 +551,44 @@ class MLXLiveGUI:
             ymax_r = max(ymax + margin, self.max_y_raw)
 
             self.ax_raw.set_ylim(ymin_r, ymax_r)
+
+        # Update force plot
+        if self.grip_force_sma and len(self.grip_force_sma) == len(self.times):
+            grip_disp = self.grip_force_sma
+            down_disp = self.downforce_sma
+        else:
+            grip_disp = self.grip_force
+            down_disp = self.downforce
+
+        if grip_disp and down_disp:
+            self.line_grip.set_data(t_rel, grip_disp)
+            self.line_down.set_data(t_rel, down_disp)
+
+            self.shadow_grip.set_data(t_rel, grip_disp)
+            self.shadow_down.set_data(t_rel, down_disp)
+
+            # Update text overlay for forces
+            self.text_overlay_force.set_text(
+                f"Grip Force: {grip_disp[-1]:6.2f} N\n"
+                f"Downforce: {down_disp[-1]:6.2f} N"
+            )
+
+            # Update force axis limits
+            self.ax_force.set_xlim(0, self.history_seconds)
+
+            all_force = (*grip_disp, *down_disp)
+            if all_force:
+                ymin = min(all_force)
+                ymax = max(all_force)
+                if ymin == ymax:
+                    ymin -= 0.1
+                    ymax += 0.1
+                margin = (ymax - ymin) * 0.15
+
+                ymin_f = min(ymin - margin, self.min_y_force)
+                ymax_f = max(ymax + margin, self.max_y_force)
+
+                self.ax_force.set_ylim(ymin_f, ymax_f)
 
         self.canvas.draw_idle()
 
