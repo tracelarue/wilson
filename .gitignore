@@ -4,6 +4,7 @@ build/
 install/
 .env
 Arducam_tof_camera/
+AxioTDK-trace/
 
 
 
