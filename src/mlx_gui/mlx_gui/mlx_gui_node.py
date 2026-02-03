@@ -312,12 +312,16 @@ class MLXLiveGUI:
         )
 
         # Raw plot lines
-        self.shadowX_raw, = self.ax_raw.plot([], [], linewidth=4, alpha=0.10)
-        self.shadowY_raw, = self.ax_raw.plot([], [], linewidth=4, alpha=0.10)
-        self.shadowZ_raw, = self.ax_raw.plot([], [], linewidth=4, alpha=0.10)
-        self.line_x_raw, = self.ax_raw.plot([], [], label="X", linewidth=2.5)
-        self.line_y_raw, = self.ax_raw.plot([], [], label="Y", linewidth=2.5)
-        self.line_z_raw, = self.ax_raw.plot([], [], label="Z", linewidth=2.5)
+        x_color = "#d62728"
+        y_color = "#2ca02c"
+        z_color = "#1f77b4"
+
+        self.shadowX_raw, = self.ax_raw.plot([], [], linewidth=4, alpha=0.10, color=x_color)
+        self.shadowY_raw, = self.ax_raw.plot([], [], linewidth=4, alpha=0.10, color=y_color)
+        self.shadowZ_raw, = self.ax_raw.plot([], [], linewidth=4, alpha=0.10, color=z_color)
+        self.line_x_raw, = self.ax_raw.plot([], [], label="X", linewidth=2.5, color=x_color)
+        self.line_y_raw, = self.ax_raw.plot([], [], label="Y", linewidth=2.5, color=y_color)
+        self.line_z_raw, = self.ax_raw.plot([], [], label="Z", linewidth=2.5, color=z_color)
         self.ax_raw.legend(loc="upper right", frameon=False)
 
         # Bottom plot: Force measurements
@@ -343,10 +347,13 @@ class MLXLiveGUI:
         )
 
         # Force plot lines
-        self.shadow_grip, = self.ax_force.plot([], [], linewidth=4, alpha=0.10)
-        self.shadow_down, = self.ax_force.plot([], [], linewidth=4, alpha=0.10)
-        self.line_grip, = self.ax_force.plot([], [], label="Grip Force", linewidth=2.5)
-        self.line_down, = self.ax_force.plot([], [], label="Downforce", linewidth=2.5)
+        grip_color = "#800080"
+        down_color = "#ff7f0e"
+
+        self.shadow_grip, = self.ax_force.plot([], [], linewidth=4, alpha=0.10, color=grip_color)
+        self.shadow_down, = self.ax_force.plot([], [], linewidth=4, alpha=0.10, color=down_color)
+        self.line_grip, = self.ax_force.plot([], [], label="Grip Force", linewidth=2.5, color=grip_color)
+        self.line_down, = self.ax_force.plot([], [], label="Downforce", linewidth=2.5, color=down_color)
         self.ax_force.legend(loc="upper right", frameon=False)
 
         self.fig.tight_layout()
@@ -428,7 +435,7 @@ class MLXLiveGUI:
         self._update_from_queue()
         self._update_plot()
         self._update_sample_rate()
-        self.root.after(20, self._schedule_update)
+        self.root.after(50, self._schedule_update)
 
     def _update_from_queue(self):
         """Drain data queue and update buffers."""
