@@ -14,36 +14,47 @@ String inputBuffer = "";
 
 // Current servo positions (tracking) - matches ROS2 "idle" state from SRDF
 int currentBase = 135, currentShoulder = 149, currentElbow = 10, currentWrist = 100, currentGripper = 0;
+unsigned long lastCmdMs = 0;
+bool servosAttached = true;
+#define SERVO_IDLE_TIMEOUT_MS 500
 
 // LED breathing variables
 #define LED_PIN 11
 int ledBrightness = 25;
 int ledDirection = 1;
 unsigned long lastLedUpdate = 0;
-#define LED_UPDATE_INTERVAL 20  // Update every 20ms for smooth breathing
+#define LED_UPDATE_INTERVAL 5  // Match arm_control timing
 
 // MLX90393 sensor variables
 MLX90393 mlx;
 MLX90393::txyz data;
+MLX90393::txyzRaw raw_data;
 
 // MLX sensor configuration
+// NOTE: Higher OSR/DIG_FILT increases conversion time significantly.
 int GAIN = 0;
 int RES_X = 0;
 int RES_Y = 0;
 int RES_Z = 0;
-int OSR = 2;
-int DIG_FILT = 7;
+int OSR = 2;       // fastest
+int DIG_FILT = 7;  // fastest
 int taredZ = 0;
 
 // MLX sensor timing
 unsigned long lastMLXUpdate = 0;
-#define MLX_UPDATE_INTERVAL 100  // Read every 100ms
+#define MLX_UPDATE_INTERVAL 20  // Read every 20ms
+bool mlx_inflight = false;
+unsigned long mlx_start_ms = 0;
+uint16_t mlx_conv_ms = 0;
+const uint8_t mlx_flags = MLX90393::X_FLAG | MLX90393::Y_FLAG | MLX90393::Z_FLAG;
 
 void setup() {
   Serial.begin(115200);
 
   // Initialize MLX sensor
   Wire.begin();
+  // Raise I2C clock to improve MLX read throughput (default is 100kHz).
+  Wire.setClock(400000);
   delay(50);
   mlx.begin();
   delay(50);
@@ -51,6 +62,7 @@ void setup() {
   mlx.setResolution(RES_X, RES_Y, RES_Z);
   mlx.setOverSampling(OSR);
   mlx.setDigitalFiltering(DIG_FILT);
+  mlx_conv_ms = mlx.convDelayMillis();
 
   // Setup LED pin
   pinMode(LED_PIN, OUTPUT);
@@ -60,6 +72,8 @@ void setup() {
   elbowServo.attach(6, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
   wristServo.attach(9, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
   gripperServo.attach(10, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
+  servosAttached = true;
+  lastCmdMs = millis();
 
   // Default positions - matches ROS2 "idle" state {0.0, 0.2495, -2.1817, -0.6098, 0.0}
   setServoPosition(baseServo, 135);     // joint_1: 0.0 rad
@@ -72,6 +86,28 @@ void setup() {
 }
 
 void loop() {
+  // Handle incoming servo commands (match arm_control loop ordering)
+  while (Serial.available() > 0) {
+    char incomingChar = Serial.read();
+
+    if (incomingChar == ',') {
+      processCommand(inputBuffer);
+      inputBuffer = "";
+    } else {
+      inputBuffer += incomingChar;
+    }
+  }
+
+  // Detach servos on idle to reduce jitter
+  if (servosAttached && (millis() - lastCmdMs > SERVO_IDLE_TIMEOUT_MS)) {
+    baseServo.detach();
+    shoulderServo.detach();
+    elbowServo.detach();
+    wristServo.detach();
+    gripperServo.detach();
+    servosAttached = false;
+  }
+
   // Update LED breathing effect
   unsigned long currentMillis = millis();
   if (currentMillis - lastLedUpdate >= LED_UPDATE_INTERVAL) {
@@ -89,11 +125,19 @@ void loop() {
     analogWrite(LED_PIN, ledBrightness);
   }
 
-  // Update MLX sensor reading
+  // Update MLX sensor reading (non-blocking)
   if (currentMillis - lastMLXUpdate >= MLX_UPDATE_INTERVAL) {
     lastMLXUpdate = currentMillis;
+    if (!mlx_inflight) {
+      mlx.startMeasurement(mlx_flags);
+      mlx_start_ms = currentMillis;
+      mlx_inflight = true;
+    }
+  }
 
-    mlx.readData(data);
+  if (mlx_inflight && (currentMillis - mlx_start_ms >= mlx_conv_ms)) {
+    mlx.readMeasurement(mlx_flags, raw_data);
+    data = mlx.convertRaw(raw_data);
     taredZ = data.z + 18630;
 
     // Print exactly 3 values for hardware interface parser
@@ -102,17 +146,27 @@ void loop() {
     Serial.print(data.y);
     Serial.print(", ");
     Serial.println(taredZ);
+
+    mlx_inflight = false;
   }
 
-  while (Serial.available() > 0) {
-    char incomingChar = Serial.read();
+  // If a measurement completed, only print when there's space to avoid blocking.
+  if (mlx_inflight && (currentMillis - mlx_start_ms >= mlx_conv_ms)) {
+    mlx.readMeasurement(mlx_flags, raw_data);
+    data = mlx.convertRaw(raw_data);
+    taredZ = data.z + 18630;
 
-    if (incomingChar == ',') {
-      processCommand(inputBuffer);
-      inputBuffer = "";
-    } else {
-      inputBuffer += incomingChar;
+    // Print exactly 3 values for hardware interface parser
+    // Guard against Serial TX blocking which can introduce jitter.
+    if (Serial.availableForWrite() >= 32) {
+      Serial.print(data.x);
+      Serial.print(", ");
+      Serial.print(data.y);
+      Serial.print(", ");
+      Serial.println(taredZ);
     }
+
+    mlx_inflight = false;
   }
 }
 
@@ -140,6 +194,24 @@ void processCommand(String command) {
   int angle = command.substring(1).toInt();
 
   if (angle < 0 || angle > MAX_USER_ANGLE) return;
+
+  // Re-attach on first command after idle and restore current positions
+  if (!servosAttached) {
+    baseServo.attach(3, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
+    shoulderServo.attach(5, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
+    elbowServo.attach(6, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
+    wristServo.attach(9, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
+    gripperServo.attach(10, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
+    servosAttached = true;
+
+    setServoPosition(baseServo, currentBase);
+    setServoPosition(shoulderServo, currentShoulder);
+    setServoPosition(elbowServo, currentElbow);
+    setServoPosition(wristServo, currentWrist);
+    setServoPosition(gripperServo, currentGripper);
+  }
+
+  lastCmdMs = millis();
 
   switch (joint) {
     case 'b': 

@@ -354,12 +354,12 @@ bool ArduinobotInterface::parseMLXData(const std::string& line)
     mlx_z_ = values[2];
 
     // DEBUG: Log parsed values
-    static int log_count = 0;
-    if (++log_count % 10 == 0)  // Log every 10 readings to avoid spam
-    {
-      RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"),
-                  "MLX parsed: x=%.2f, y=%.2f, z=%.2f", mlx_x_, mlx_y_, mlx_z_);
-    }
+    // static int log_count = 0;
+    // if (++log_count % 10 == 0)  // Log every 10 readings to avoid spam
+    // {
+    //   RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"),
+    //               "MLX parsed: x=%.2f, y=%.2f, z=%.2f", mlx_x_, mlx_y_, mlx_z_);
+    // }
 
     return true;
   }
