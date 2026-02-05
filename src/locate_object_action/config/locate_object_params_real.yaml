@@ -7,7 +7,7 @@ locate_object_action_server:
     z_tolerance: 0.02    # Distance tolerance (meters) - success when |error_z| < z_tolerance
 
     # Control parameters (proportional control gains)
-    k_linear: 3.0     # Linear velocity gain (higher = faster forward/backward movement)
+    k_linear: 4.0     # Linear velocity gain (higher = faster forward/backward movement)
     k_angular: 10.0   # Angular velocity gain (higher = faster rotation)
     max_linear_vel: 0.5  # Maximum linear velocity (m/s)
     max_angular_vel: 0.5 # Maximum angular velocity (rad/s)
@@ -25,7 +25,7 @@ locate_object_action_server:
 
     # Y-value override (for debugging/testing)
     override_y_value: true   # Enable to force Y value to fixed_y_value (disables calculated Y from depth camera)
-    fixed_y_value: 0.1       # Fixed Y value (meters) when override_y_value is true
+    fixed_y_value: 0.08       # Fixed Y value (meters) when override_y_value is true
 
     # Operation parameters
     max_detection_attempts: 5   # Maximum number of detection attempts before failure

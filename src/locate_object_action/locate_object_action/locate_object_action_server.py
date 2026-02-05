@@ -306,7 +306,7 @@ class LocateObjectActionServer(Node):
 
                 # Add can diameter offset to z position (0.033m = 33mm can diameter)
                 # This accounts for the distance from the can center to its front edge
-                current_z_adjusted = current_z + 0.01
+                current_z_adjusted = current_z + 0.0
 
                 # Calculate errors using adjusted z position
                 error_x = current_x - self.target_x

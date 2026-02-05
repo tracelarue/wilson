@@ -374,6 +374,9 @@ private:
                         const std::shared_ptr<GoalHandleGrabObject>& goal_handle,
                         std::shared_ptr<GrabObject::Feedback>& feedback)
     {
+        (void)goal_handle;
+        (void)feedback;
+
         mtc::Task task;
         task.stages()->setName("grab objecttask");
         task.loadRobotModel(shared_from_this());
@@ -507,7 +510,7 @@ private:
             {
                 auto stage = std::make_unique<mtc::stages::MoveTo>("close hand", interpolation_planner);
                 stage->setGroup(hand_group_name);
-                stage->setGoal("can");
+                stage->setGoal("grab_object");
                 grasp->insert(std::move(stage));
             }
 

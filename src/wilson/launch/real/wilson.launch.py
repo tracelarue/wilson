@@ -183,7 +183,6 @@ def generate_launch_description():
     rosbridge_server = ExecuteProcess(
         cmd=['tilix', '-e', 'bash', '-c', 'ros2 launch rosbridge_server rosbridge_websocket_launch.xml; code=$?; if [ $code -ne 0 ]; then echo "Process exited with code $code. Press Enter to close..."; read; fi'],
         cwd='/wilson',
-        output='screen',
     )
 
     # Timed optional processes
@@ -244,6 +243,6 @@ def generate_launch_description():
         action_servers_timer,
         #teleop,
         rosbridge_timer,
-        gemini_ros_mcp_timer,
+        #gemini_ros_mcp_timer,
         #initial_pose_timer
     ])
