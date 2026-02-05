@@ -188,6 +188,23 @@ def generate_launch_description():
         ],
     )
 
+    # IR Signal Action Server Node (sim mode)
+    ir_signal_action_server_node = Node(
+        package="ir_signal_action",
+        executable="ir_signal_action_server",
+        name="ir_signal_action_server",
+        output="screen",
+        parameters=[
+            {'mode': 'sim'},
+            {'gpio_pin': 18},
+            {'burst_duration_ms': 1000},
+            {'wait_ms': 5000},
+            {'carrier_frequency_hz': 38000},
+            {'sim_topic': '/ir_signal'},
+            {'use_sim_time': True},
+        ],
+    )
+
     # Timed launches to ensure proper startup sequence
     nav2_timer = TimerAction(
         period=3.0,
@@ -207,7 +224,7 @@ def generate_launch_description():
     # Action servers timer - start after move_group
     action_servers_timer = TimerAction(
         period=10.0,
-        actions=[grab_object_server_node, locate_object_server_node, move_to_state_server_node, navigate_to_location_server_node]
+        actions=[grab_object_server_node, locate_object_server_node, move_to_state_server_node, navigate_to_location_server_node, ir_signal_action_server_node]
     )
 
     # Teleop keyboard in separate terminal

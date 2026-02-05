@@ -161,10 +161,26 @@ def generate_launch_description():
         ],
     )
 
+    # IR Signal Action Server node
+    ir_signal_action_server_node = Node(
+        package='ir_signal_action',
+        executable='ir_signal_action_server',
+        name='ir_signal_action_server',
+        output='screen',
+        parameters=[
+            {'mode': 'robot'},
+            {'gpio_pin': 18},
+            {'burst_duration_ms': 1000},
+            {'wait_ms': 5000},
+            {'carrier_frequency_hz': 38000},
+            {'sim_topic': '/ir_signal'},
+        ],
+    )
+
     # Timer for action servers - start after move_group is ready
     action_servers_timer = TimerAction(
         period=13.0,
-        actions=[locate_object_server_node, grab_object_server_node, move_to_state_server_node]
+        actions=[locate_object_server_node, grab_object_server_node, move_to_state_server_node, ir_signal_action_server_node]
     )
 
     # Add timer to start navigation after Gazebo is ready

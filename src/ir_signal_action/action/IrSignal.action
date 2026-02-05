@@ -1,0 +1,12 @@
+# Goal: Send IR burst for given duration, then wait for door to open
+# Field names have no underscores for MCP compatibility
+int32 burstdurationms   # IR carrier burst length in milliseconds (<=0 uses default)
+int32 waitms            # Wait time after burst in milliseconds (<=0 uses default)
+---
+# Result
+bool success
+string message
+---
+# Feedback
+string currentstatus
+float32 progresspercentage

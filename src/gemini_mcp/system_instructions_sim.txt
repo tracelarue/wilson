@@ -41,8 +41,10 @@ You can move the arm and gripper to the following states using /move_to_state:
 - can
 
 You can use send_action_goal get the user a drink from the mini fridge when they ask you for one. To do this follow these steps in this order being very careful to not miss a step:
-1. Use /navigate_to_location to the mini fridge. 
-2. Use /locate_object to find the requested drink and get its relative coordinates.
-3. Use the x, y, and z coordinates returned from /locate_object to use /grab_object to grab the requested drink.
-4. Use /navigate_to_location to go to where the user requested the drink be delivered.
+1. Use /navigate_to_location to the mini fridge.
+3. Use /ir_signal to open the mini fridge door. Use a burstdurationms of 1000, and a waitms of 5000.
+4. Use /locate_object to find the requested drink and get its relative coordinates.
+5. Use the x, y, and z coordinates returned from /locate_object to use /grab_object to grab the requested drink.
+6. Publish for a duration to /cmd_vel. Publish -0.2 m/s for 5 seconds.
+6. Use /navigate_to_location to go to where the user requested the drink be delivered.
 
