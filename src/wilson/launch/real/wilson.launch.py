@@ -161,6 +161,16 @@ def generate_launch_description():
         ],
     )
 
+    # Navigate To Location Action Server Node
+    navigate_to_location_server_node = Node(
+        package="navigate_to_location_action",
+        executable="navigate_to_location_server",
+        name="navigate_to_location_server",
+        output="screen",
+        parameters=[
+            {'use_sim_time': True}
+        ],
+    )
     # IR Signal Action Server node
     ir_signal_action_server_node = Node(
         package='ir_signal_action',
@@ -180,7 +190,7 @@ def generate_launch_description():
     # Timer for action servers - start after move_group is ready
     action_servers_timer = TimerAction(
         period=13.0,
-        actions=[locate_object_server_node, grab_object_server_node, move_to_state_server_node, ir_signal_action_server_node]
+        actions=[locate_object_server_node, grab_object_server_node, move_to_state_server_node, navigate_to_location_server_node, ir_signal_action_server_node]
     )
 
     # Add timer to start navigation after Gazebo is ready
@@ -198,7 +208,7 @@ def generate_launch_description():
 
     rosbridge_server = ExecuteProcess(
         cmd=['tilix', '-e', 'bash', '-c', 'ros2 launch rosbridge_server rosbridge_websocket_launch.xml; code=$?; if [ $code -ne 0 ]; then echo "Process exited with code $code. Press Enter to close..."; read; fi'],
-        cwd='/wilson',
+        cwd='/wilson'
     )
 
     # Timed optional processes
@@ -258,7 +268,7 @@ def generate_launch_description():
         #localization_timer,
         action_servers_timer,
         #teleop,
-        rosbridge_timer,
+        rosbridge_timer
         #gemini_ros_mcp_timer,
         #initial_pose_timer
     ])
