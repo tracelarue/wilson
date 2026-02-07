@@ -179,6 +179,8 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {'mode': 'robot'},
+            {'gpio_backend': 'gpiod'},
+            {'gpio_chip': '/dev/gpiochip0'},
             {'gpio_pin': 18},
             {'pwm_channel': 2},
             {'pwm_chip': 0},
