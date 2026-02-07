@@ -12,9 +12,9 @@ from std_msgs.msg import Int32
 from ir_signal_action.action import IrSignal
 
 try:
-    import pigpio
+    from rpi_hardware_pwm import HardwarePWM
 except Exception:  # pragma: no cover - optional dependency on non-RPi systems
-    pigpio = None
+    HardwarePWM = None
 
 
 class IrSignalActionServer(Node):
@@ -26,6 +26,8 @@ class IrSignalActionServer(Node):
     DEFAULT_FREQ_HZ = 38000
     DEFAULT_TRIGGER_PULSE_COUNT = 5
     MIN_PULSE_ON_MS = 30
+    DEFAULT_PWM_CHANNEL = 2
+    DEFAULT_PWM_CHIP = 0
 
     def __init__(self):
         super().__init__('ir_signal_action_server')
@@ -37,6 +39,8 @@ class IrSignalActionServer(Node):
         self.declare_parameter('carrier_frequency_hz', self.DEFAULT_FREQ_HZ)
         self.declare_parameter('sim_topic', '/ir_signal')
         self.declare_parameter('trigger_pulse_count', self.DEFAULT_TRIGGER_PULSE_COUNT)
+        self.declare_parameter('pwm_channel', self.DEFAULT_PWM_CHANNEL)
+        self.declare_parameter('pwm_chip', self.DEFAULT_PWM_CHIP)
 
         self.mode = self.get_parameter('mode').get_parameter_value().string_value
         self.gpio_pin = self.get_parameter('gpio_pin').get_parameter_value().integer_value
@@ -45,24 +49,34 @@ class IrSignalActionServer(Node):
         self.frequency_hz = self.get_parameter('carrier_frequency_hz').get_parameter_value().integer_value
         self.sim_topic = self.get_parameter('sim_topic').get_parameter_value().string_value
         self.trigger_pulse_count = self.get_parameter('trigger_pulse_count').get_parameter_value().integer_value
+        self.pwm_channel = self.get_parameter('pwm_channel').get_parameter_value().integer_value
+        self.pwm_chip = self.get_parameter('pwm_chip').get_parameter_value().integer_value
 
         self.callback_group = ReentrantCallbackGroup()
 
         self.sim_pub = self.create_publisher(Int32, self.sim_topic, 10)
         self._publish_sim_signal(0)
 
-        self.pi = None
+        self.pwm = None
         if self.mode != 'sim':
-            if pigpio is None:
-                self.get_logger().error('pigpio is not available. Install and start pigpio daemon.')
+            if HardwarePWM is None:
+                self.get_logger().error(
+                    'rpi_hardware_pwm is not available. Install the python package in the container.'
+                )
             else:
-                self.pi = pigpio.pi()
-                if not self.pi.connected:
-                    self.get_logger().error('Failed to connect to pigpio daemon. Is pigpiod running?')
-                    self.pi = None
-                else:
-                    self.pi.set_mode(self.gpio_pin, pigpio.OUTPUT)
-                    self.pi.hardware_PWM(self.gpio_pin, 0, 0)
+                try:
+                    self.pwm = HardwarePWM(
+                        pwm_channel=self.pwm_channel,
+                        hz=self.frequency_hz,
+                        chip=self.pwm_chip,
+                    )
+                    self.pwm.start(0.0)
+                except Exception as exc:
+                    self.get_logger().error(
+                        f'Failed to initialize hardware PWM '
+                        f'(channel={self.pwm_channel}, chip={self.pwm_chip}): {exc}'
+                    )
+                    self.pwm = None
 
         self._action_server = ActionServer(
             self,
@@ -77,10 +91,10 @@ class IrSignalActionServer(Node):
         self.get_logger().info('IR signal action server started')
 
     def destroy_node(self):
-        if self.pi is not None:
+        if self.pwm is not None:
             try:
-                self.pi.hardware_PWM(self.gpio_pin, 0, 0)
-                self.pi.stop()
+                self.pwm.change_duty_cycle(0.0)
+                self.pwm.stop()
             except Exception:
                 pass
         super().destroy_node()
@@ -108,9 +122,9 @@ class IrSignalActionServer(Node):
             wait_ms = self.default_wait_ms
         pulse_count = max(1, int(self.trigger_pulse_count))
 
-        if self.mode != 'sim' and self.pi is None:
+        if self.mode != 'sim' and self.pwm is None:
             result.success = False
-            result.message = 'pigpio not available or daemon not running'
+            result.message = 'hardware PWM backend unavailable in container'
             goal_handle.abort()
             return result
 
@@ -161,11 +175,11 @@ class IrSignalActionServer(Node):
         return result
 
     def _start_pwm(self):
-        duty_cycle = 500000  # 50% duty cycle in pigpio scale (0-1,000,000)
-        self.pi.hardware_PWM(self.gpio_pin, self.frequency_hz, duty_cycle)
+        self.pwm.change_frequency(self.frequency_hz)
+        self.pwm.change_duty_cycle(50.0)
 
     def _stop_pwm(self):
-        self.pi.hardware_PWM(self.gpio_pin, 0, 0)
+        self.pwm.change_duty_cycle(0.0)
 
     def _compute_pulse_timing_ms(self, total_window_ms: int, pulse_count: int):
         """Split total window into count pulses + gaps for active-low receiver edge detection."""

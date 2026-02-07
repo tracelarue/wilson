@@ -93,7 +93,8 @@ RUN pip3 install --no-cache-dir \
 RUN pip3 install --no-cache-dir \
     ArducamDepthCamera \
     pyaudio \
-    mss
+    mss \
+    rpi-hardware-pwm
 
 # Install communication Python packages (higher frequency of change)
 RUN pip3 install --no-cache-dir \

@@ -11,6 +11,8 @@ def generate_launch_description():
         parameters=[
             {'mode': 'robot'},
             {'gpio_pin': 18},
+            {'pwm_channel': 2},
+            {'pwm_chip': 0},
             {'burst_duration_ms': 1000},
             {'wait_ms': 5000},
             {'carrier_frequency_hz': 38000},
