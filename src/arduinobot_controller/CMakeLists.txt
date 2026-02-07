@@ -30,6 +30,7 @@ ament_target_dependencies(${PROJECT_NAME}
   pluginlib
   rclcpp
   rclcpp_lifecycle
+  sensor_msgs
 )
 
 pluginlib_export_plugin_description_file(hardware_interface arduinobot_controller.xml)
@@ -74,6 +75,7 @@ ament_export_dependencies(
   pluginlib
   rclcpp
   rclcpp_lifecycle
+  sensor_msgs
 )
 
 ament_package()

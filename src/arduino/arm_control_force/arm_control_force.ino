@@ -1,4 +1,6 @@
 #include <Servo.h>
+#include <Wire.h>
+#include <MLX90393.h>
 
 Servo baseServo, shoulderServo, elbowServo, wristServo, gripperServo;
 
@@ -7,38 +9,71 @@ Servo baseServo, shoulderServo, elbowServo, wristServo, gripperServo;
 #define SERVO_PHYSICAL_ANGLE 270
 #define MAX_USER_ANGLE 270
 
-// Force limiter configuration - using analog pin for force sensor
-#define FORCE_SENSOR_PIN A0
-long forceLimit = 500;  // Analog reading threshold (0-1023) - adjustable at runtime
-bool forceLimitingEnabled = false;
-
 // Serial buffer
 String inputBuffer = "";
 
 // Current servo positions (tracking) - matches ROS2 "idle" state from SRDF
 int currentBase = 135, currentShoulder = 149, currentElbow = 10, currentWrist = 100, currentGripper = 0;
+unsigned long lastCmdMs = 0;
+bool servosAttached = true;
+#define SERVO_IDLE_TIMEOUT_MS 500
 
 // LED breathing variables
 #define LED_PIN 11
 int ledBrightness = 25;
 int ledDirection = 1;
 unsigned long lastLedUpdate = 0;
-#define LED_UPDATE_INTERVAL 5  // Update every 20ms for smooth breathing
+#define LED_UPDATE_INTERVAL 5  // Match arm_control timing
+
+// MLX90393 sensor variables
+MLX90393 mlx;
+MLX90393::txyz data;
+MLX90393::txyzRaw raw_data;
+
+// MLX sensor configuration
+// NOTE: Higher OSR/DIG_FILT increases conversion time significantly.
+int GAIN = 0;
+int RES_X = 0;
+int RES_Y = 0;
+int RES_Z = 0;
+int OSR = 1;       // fastest
+int DIG_FILT = 7;  // fastest
+int taredZ = 0;
+
+// MLX sensor timing
+unsigned long lastMLXUpdate = 0;
+#define MLX_UPDATE_INTERVAL 20  // Read every 20ms
+bool mlx_inflight = false;
+unsigned long mlx_start_ms = 0;
+uint16_t mlx_conv_ms = 0;
+const uint8_t mlx_flags = MLX90393::X_FLAG | MLX90393::Y_FLAG | MLX90393::Z_FLAG;
 
 void setup() {
   Serial.begin(115200);
 
+  // Initialize MLX sensor
+  Wire.begin();
+  // Raise I2C clock to improve MLX read throughput (default is 100kHz).
+  Wire.setClock(400000);
+  delay(50);
+  mlx.begin();
+  delay(50);
+  mlx.setGainSel(GAIN);
+  mlx.setResolution(RES_X, RES_Y, RES_Z);
+  mlx.setOverSampling(OSR);
+  mlx.setDigitalFiltering(DIG_FILT);
+  mlx_conv_ms = mlx.convDelayMillis();
+
   // Setup LED pin
   pinMode(LED_PIN, OUTPUT);
-
-  // Setup force sensor pin (analog input)
-  pinMode(FORCE_SENSOR_PIN, INPUT);
 
   baseServo.attach(3, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
   shoulderServo.attach(5, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
   elbowServo.attach(6, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
   wristServo.attach(9, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
   gripperServo.attach(10, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
+  servosAttached = true;
+  lastCmdMs = millis();
 
   // Default positions - matches ROS2 "idle" state {0.0, 0.2495, -2.1817, -0.6098, 0.0}
   setServoPosition(baseServo, 135);     // joint_1: 0.0 rad
@@ -51,23 +86,7 @@ void setup() {
 }
 
 void loop() {
-  // Update LED breathing effect
-  unsigned long currentMillis = millis();
-  if (currentMillis - lastLedUpdate >= LED_UPDATE_INTERVAL) {
-    lastLedUpdate = currentMillis;
-    
-    ledBrightness += ledDirection;
-    if (ledBrightness >= 255) {
-      ledBrightness = 255;
-      ledDirection = -1;
-    } else if (ledBrightness <= 25) {
-      ledBrightness = 25;
-      ledDirection = 1;
-    }
-    
-    analogWrite(LED_PIN, ledBrightness);
-  }
-
+  // Handle incoming servo commands (match arm_control loop ordering)
   while (Serial.available() > 0) {
     char incomingChar = Serial.read();
 
@@ -78,13 +97,84 @@ void loop() {
       inputBuffer += incomingChar;
     }
   }
+
+  // Detach servos on idle to reduce jitter
+  if (servosAttached && (millis() - lastCmdMs > SERVO_IDLE_TIMEOUT_MS)) {
+    baseServo.detach();
+    shoulderServo.detach();
+    elbowServo.detach();
+    wristServo.detach();
+    gripperServo.detach();
+    servosAttached = false;
+  }
+
+  // Update LED breathing effect
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastLedUpdate >= LED_UPDATE_INTERVAL) {
+    lastLedUpdate = currentMillis;
+
+    ledBrightness += ledDirection;
+    if (ledBrightness >= 255) {
+      ledBrightness = 255;
+      ledDirection = -1;
+    } else if (ledBrightness <= 25) {
+      ledBrightness = 25;
+      ledDirection = 1;
+    }
+
+    analogWrite(LED_PIN, ledBrightness);
+  }
+
+  // Update MLX sensor reading (non-blocking)
+  if (currentMillis - lastMLXUpdate >= MLX_UPDATE_INTERVAL) {
+    lastMLXUpdate = currentMillis;
+    if (!mlx_inflight) {
+      mlx.startMeasurement(mlx_flags);
+      mlx_start_ms = currentMillis;
+      mlx_inflight = true;
+    }
+  }
+
+  if (mlx_inflight && (currentMillis - mlx_start_ms >= mlx_conv_ms)) {
+    mlx.readMeasurement(mlx_flags, raw_data);
+    data = mlx.convertRaw(raw_data);
+    taredZ = data.z + 18630;
+
+    // Print exactly 3 values for hardware interface parser
+    Serial.print(data.x);
+    Serial.print(", ");
+    Serial.print(data.y);
+    Serial.print(", ");
+    Serial.println(taredZ);
+
+    mlx_inflight = false;
+  }
+
+  // If a measurement completed, only print when there's space to avoid blocking.
+  if (mlx_inflight && (currentMillis - mlx_start_ms >= mlx_conv_ms)) {
+    mlx.readMeasurement(mlx_flags, raw_data);
+    data = mlx.convertRaw(raw_data);
+    taredZ = data.z + 18630;
+
+    // Print exactly 3 values for hardware interface parser
+    // Guard against Serial TX blocking which can introduce jitter.
+    if (Serial.availableForWrite() >= 32) {
+      Serial.print(data.x);
+      Serial.print(", ");
+      Serial.print(data.y);
+      Serial.print(", ");
+      Serial.println(taredZ);
+    }
+
+    mlx_inflight = false;
+  }
 }
 
 void processCommand(String command) {
   if (command.length() < 4) return;
 
   char joint = command.charAt(0);
-
+  
   // Handle position read request
   if (command == "?") {
     // Send current positions: base,shoulder,elbow,wrist,gripper
@@ -100,39 +190,28 @@ void processCommand(String command) {
     Serial.println();
     return;
   }
-
-  // Handle force limit configuration: f<value>
-  if (joint == 'f') {
-    long newLimit = command.substring(1).toInt();
-    if (newLimit > 0) {
-      forceLimit = newLimit;
-      forceLimitingEnabled = true;
-      Serial.print("Force limit updated to: ");
-      Serial.println(forceLimit);
-    }
-    return;
-  }
-
-  // Handle force limiting disable: d
-  if (command == "d") {
-    forceLimitingEnabled = false;
-    Serial.println("Force limiting disabled");
-    return;
-  }
-
-  // Handle force reading request: r
-  if (command == "r") {
-    int force = analogRead(FORCE_SENSOR_PIN);
-    Serial.print("Current force reading: ");
-    Serial.println(force);
-    return;
-  }
-
-  if (command.length() < 4) return;
-
+  
   int angle = command.substring(1).toInt();
 
   if (angle < 0 || angle > MAX_USER_ANGLE) return;
+
+  // Re-attach on first command after idle and restore current positions
+  if (!servosAttached) {
+    baseServo.attach(3, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
+    shoulderServo.attach(5, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
+    elbowServo.attach(6, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
+    wristServo.attach(9, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
+    gripperServo.attach(10, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
+    servosAttached = true;
+
+    setServoPosition(baseServo, currentBase);
+    setServoPosition(shoulderServo, currentShoulder);
+    setServoPosition(elbowServo, currentElbow);
+    setServoPosition(wristServo, currentWrist);
+    setServoPosition(gripperServo, currentGripper);
+  }
+
+  lastCmdMs = millis();
 
   switch (joint) {
     case 'b': 
@@ -155,8 +234,9 @@ void processCommand(String command) {
       setServoPosition(wristServo, angle);
       currentWrist = angle;
       break;
-    case 'g':
-      setGripperPositionWithForceLimit(angle);
+    case 'g': 
+      setServoPosition(gripperServo, angle); 
+      currentGripper = angle;
       break;
     default: break;
   }
@@ -166,78 +246,4 @@ void setServoPosition(Servo &servo, int angle) {
   angle = constrain(angle, 0, MAX_USER_ANGLE);
   int pulseWidth = map(angle, 0, SERVO_PHYSICAL_ANGLE, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
   servo.writeMicroseconds(pulseWidth);
-}
-
-void setGripperPositionWithForceLimit(int targetAngle) {
-  targetAngle = constrain(targetAngle, 0, MAX_USER_ANGLE);
-
-  // If opening the gripper (target < current), move directly without force check
-  if (targetAngle < currentGripper) {
-    setServoPosition(gripperServo, targetAngle);
-    currentGripper = targetAngle;
-    return;
-  }
-
-  // If closing the gripper (target >= current), check force if sensor available
-  if (sensorAvailable) {
-    long force = readForceMagnitude();
-
-    // Check if force limit exceeded
-    if (force > forceLimit) {
-      Serial.print("Force limit reached! Force: ");
-      Serial.print(force);
-      Serial.print(" > ");
-      Serial.println(forceLimit);
-      // Don't move, stay at current position
-      return;
-    }
-  }
-
-  // Force is within limit (or sensor not available), move to target position
-  setServoPosition(gripperServo, targetAngle);
-  currentGripper = targetAngle;
-}
-
-void calibrateForceSensor() {
-  Serial.println("Calibrating force sensor... (taking 20 samples)");
-
-  long sumX = 0, sumY = 0, sumZ = 0;
-  int samples = 20;
-
-  for(int i = 0; i < samples; i++) {
-    mlx.readData(data);
-    sumX += data.x;
-    sumY += data.y;
-    sumZ += data.z;
-    delay(50);
-  }
-
-  // Calculate average offsets
-  offsetX = sumX / samples;
-  offsetY = sumY / samples;
-  offsetZ = sumZ / samples;
-  forceCalibrated = true;
-
-  Serial.print("Force sensor offsets - X: ");
-  Serial.print(offsetX);
-  Serial.print(", Y: ");
-  Serial.print(offsetY);
-  Serial.print(", Z: ");
-  Serial.println(offsetZ);
-}
-
-long readForceMagnitude() {
-  if (!forceCalibrated) return 0;
-
-  mlx.readData(data);
-
-  // Apply offsets to get tared values
-  long taredX = data.x - offsetX;
-  long taredY = data.y - offsetY;
-  long taredZ = data.z - offsetZ;
-
-  // Calculate sum of magnitudes (absolute values)
-  long sumMagnitudes = abs(taredX) + abs(taredY) + abs(taredZ);
-
-  return sumMagnitudes;
 }
