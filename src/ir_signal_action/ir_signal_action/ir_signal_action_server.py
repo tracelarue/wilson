@@ -16,6 +16,11 @@ try:
 except Exception:  # pragma: no cover - optional dependency on non-RPi systems
     pigpio = None
 
+try:
+    import gpiod
+except Exception:  # pragma: no cover - optional dependency on non-RPi systems
+    gpiod = None
+
 
 class IrSignalActionServer(Node):
     """Action server to send a 38kHz IR pulse train for mini-fridge triggering."""
@@ -31,6 +36,8 @@ class IrSignalActionServer(Node):
         super().__init__('ir_signal_action_server')
 
         self.declare_parameter('mode', 'robot')
+        self.declare_parameter('gpio_backend', 'pigpio')
+        self.declare_parameter('gpio_chip', '/dev/gpiochip0')
         self.declare_parameter('gpio_pin', self.DEFAULT_GPIO)
         self.declare_parameter('burst_duration_ms', self.DEFAULT_BURST_MS)
         self.declare_parameter('wait_ms', self.DEFAULT_WAIT_MS)
@@ -39,6 +46,8 @@ class IrSignalActionServer(Node):
         self.declare_parameter('trigger_pulse_count', self.DEFAULT_TRIGGER_PULSE_COUNT)
 
         self.mode = self.get_parameter('mode').get_parameter_value().string_value
+        self.gpio_backend = self.get_parameter('gpio_backend').get_parameter_value().string_value.lower()
+        self.gpio_chip = self.get_parameter('gpio_chip').get_parameter_value().string_value
         self.gpio_pin = self.get_parameter('gpio_pin').get_parameter_value().integer_value
         self.default_burst_ms = self.get_parameter('burst_duration_ms').get_parameter_value().integer_value
         self.default_wait_ms = self.get_parameter('wait_ms').get_parameter_value().integer_value
@@ -52,17 +61,17 @@ class IrSignalActionServer(Node):
         self._publish_sim_signal(0)
 
         self.pi = None
+        self.gpio_line = None
+        self.gpio_chip_handle = None
         if self.mode != 'sim':
-            if pigpio is None:
-                self.get_logger().error('pigpio is not available. Install and start pigpio daemon.')
+            if self.gpio_backend == 'pigpio':
+                self._init_pigpio()
+            elif self.gpio_backend == 'gpiod':
+                self._init_gpiod()
             else:
-                self.pi = pigpio.pi()
-                if not self.pi.connected:
-                    self.get_logger().error('Failed to connect to pigpio daemon. Is pigpiod running?')
-                    self.pi = None
-                else:
-                    self.pi.set_mode(self.gpio_pin, pigpio.OUTPUT)
-                    self.pi.hardware_PWM(self.gpio_pin, 0, 0)
+                self.get_logger().error(
+                    f"Unsupported gpio_backend '{self.gpio_backend}'. Use 'pigpio' or 'gpiod'."
+                )
 
         self._action_server = ActionServer(
             self,
@@ -77,6 +86,17 @@ class IrSignalActionServer(Node):
         self.get_logger().info('IR signal action server started')
 
     def destroy_node(self):
+        if self.gpio_line is not None:
+            try:
+                self.gpio_line.set_value(0)
+                self.gpio_line.release()
+            except Exception:
+                pass
+        if self.gpio_chip_handle is not None:
+            try:
+                self.gpio_chip_handle.close()
+            except Exception:
+                pass
         if self.pi is not None:
             try:
                 self.pi.hardware_PWM(self.gpio_pin, 0, 0)
@@ -108,13 +128,13 @@ class IrSignalActionServer(Node):
             wait_ms = self.default_wait_ms
         pulse_count = max(1, int(self.trigger_pulse_count))
 
-        if self.mode != 'sim' and self.pi is None:
+        if self.mode != 'sim' and not self._hardware_ready():
             result.success = False
-            result.message = 'pigpio not available or daemon not running'
+            result.message = f"GPIO backend '{self.gpio_backend}' not available"
             goal_handle.abort()
             return result
 
-        if self.frequency_hz <= 0:
+        if self.gpio_backend == 'pigpio' and self.frequency_hz <= 0:
             result.success = False
             result.message = 'carrier_frequency_hz must be > 0'
             goal_handle.abort()
@@ -153,19 +173,64 @@ class IrSignalActionServer(Node):
         goal_handle.publish_feedback(feedback)
 
         result.success = True
-        result.message = (
-            f'Sent {pulse_count} IR pulses ({on_ms}ms on/{off_ms}ms off) '
-            f'over ~{burst_ms}ms and waited {wait_ms}ms'
-        )
+        result.message = self._result_message(pulse_count, on_ms, off_ms, burst_ms, wait_ms)
         goal_handle.succeed()
         return result
 
+    def _init_pigpio(self):
+        if pigpio is None:
+            self.get_logger().error('pigpio is not available. Install python3-pigpio and start pigpiod.')
+            return
+
+        self.pi = pigpio.pi()
+        if not self.pi.connected:
+            self.get_logger().error('Failed to connect to pigpio daemon. Is pigpiod running?')
+            self.pi = None
+            return
+        self.pi.set_mode(self.gpio_pin, pigpio.OUTPUT)
+        self.pi.hardware_PWM(self.gpio_pin, 0, 0)
+
+    def _init_gpiod(self):
+        if gpiod is None:
+            self.get_logger().error('gpiod is not available. Install python3-libgpiod.')
+            return
+
+        try:
+            self.gpio_chip_handle = gpiod.Chip(self.gpio_chip)
+            self.gpio_line = self.gpio_chip_handle.get_line(self.gpio_pin)
+            self.gpio_line.request(
+                consumer='ir_signal_action',
+                type=gpiod.LINE_REQ_DIR_OUT,
+                default_vals=[0],
+            )
+            self.gpio_line.set_value(0)
+            self.get_logger().warn(
+                'Using gpiod backend: output is unmodulated pulses, not 38kHz carrier PWM.'
+            )
+        except Exception as exc:
+            self.get_logger().error(f'Failed to initialize gpiod on {self.gpio_chip}:{self.gpio_pin}: {exc}')
+            self.gpio_line = None
+            self.gpio_chip_handle = None
+
+    def _hardware_ready(self) -> bool:
+        if self.gpio_backend == 'pigpio':
+            return self.pi is not None
+        if self.gpio_backend == 'gpiod':
+            return self.gpio_line is not None
+        return False
+
     def _start_pwm(self):
-        duty_cycle = 500000  # 50% duty cycle in pigpio scale (0-1,000,000)
-        self.pi.hardware_PWM(self.gpio_pin, self.frequency_hz, duty_cycle)
+        if self.gpio_backend == 'pigpio':
+            duty_cycle = 500000  # 50% duty cycle in pigpio scale (0-1,000,000)
+            self.pi.hardware_PWM(self.gpio_pin, self.frequency_hz, duty_cycle)
+        elif self.gpio_backend == 'gpiod':
+            self.gpio_line.set_value(1)
 
     def _stop_pwm(self):
-        self.pi.hardware_PWM(self.gpio_pin, 0, 0)
+        if self.gpio_backend == 'pigpio':
+            self.pi.hardware_PWM(self.gpio_pin, 0, 0)
+        elif self.gpio_backend == 'gpiod':
+            self.gpio_line.set_value(0)
 
     def _compute_pulse_timing_ms(self, total_window_ms: int, pulse_count: int):
         """Split total window into count pulses + gaps for active-low receiver edge detection."""
@@ -192,6 +257,16 @@ class IrSignalActionServer(Node):
             # No trailing gap needed after the last pulse.
             if idx < pulse_count - 1:
                 time.sleep(off_ms / 1000.0)
+
+    def _result_message(self, pulse_count: int, on_ms: int, off_ms: int, burst_ms: int, wait_ms: int):
+        if self.gpio_backend == 'gpiod':
+            signal = 'GPIO pulses (unmodulated)'
+        else:
+            signal = f'IR pulses @ {self.frequency_hz}Hz carrier'
+        return (
+            f'Sent {pulse_count} {signal} ({on_ms}ms on/{off_ms}ms off) '
+            f'over ~{burst_ms}ms and waited {wait_ms}ms'
+        )
 
     def _publish_sim_signal(self, value: int):
         msg = Int32()
