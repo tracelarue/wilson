@@ -168,7 +168,7 @@ def generate_launch_description():
         name="navigate_to_location_server",
         output="screen",
         parameters=[
-            {'use_sim_time': True}
+            {'use_sim_time': False}
         ],
     )
     # IR Signal Action Server node
@@ -179,14 +179,13 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {'mode': 'robot'},
-            {'gpio_backend': 'gpiod'},
-            {'gpio_chip': '/dev/gpiochip0'},
             {'gpio_pin': 18},
             {'pwm_channel': 2},
             {'pwm_chip': 0},
             {'burst_duration_ms': 1000},
             {'wait_ms': 5000},
             {'carrier_frequency_hz': 38000},
+            {'trigger_pulse_count': 500},
             {'sim_topic': '/ir_signal'},
         ],
     )

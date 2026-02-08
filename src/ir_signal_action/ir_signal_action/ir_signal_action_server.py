@@ -29,8 +29,9 @@ class IrSignalActionServer(Node):
     DEFAULT_WAIT_MS = 5000
     DEFAULT_GPIO = 18
     DEFAULT_FREQ_HZ = 38000
-    DEFAULT_TRIGGER_PULSE_COUNT = 5
-    MIN_PULSE_ON_MS = 30
+    DEFAULT_TRIGGER_PULSE_COUNT = 500
+    MIN_PULSE_ON_MS = 1
+    MIN_PULSE_OFF_MS = 1
     DEFAULT_PWM_CHANNEL = 2
     DEFAULT_PWM_CHIP = 0
 
@@ -129,7 +130,16 @@ class IrSignalActionServer(Node):
             burst_ms = self.default_burst_ms
         if wait_ms <= 0:
             wait_ms = self.default_wait_ms
-        pulse_count = max(1, int(self.trigger_pulse_count))
+        requested_pulse_count = max(1, int(self.trigger_pulse_count))
+        min_slot_ms = self.MIN_PULSE_ON_MS + self.MIN_PULSE_OFF_MS
+        max_pulse_count = max(1, int((burst_ms + self.MIN_PULSE_OFF_MS) / min_slot_ms))
+        pulse_count = min(requested_pulse_count, max_pulse_count)
+
+        if pulse_count < requested_pulse_count:
+            self.get_logger().warn(
+                f'trigger_pulse_count={requested_pulse_count} is too high for '
+                f'burst_duration_ms={burst_ms}; clamped to {pulse_count} to preserve pulse gaps'
+            )
 
         if self.mode != 'sim' and self.pwm is None:
             result.success = False
@@ -144,10 +154,9 @@ class IrSignalActionServer(Node):
             return result
 
         on_ms, off_ms = self._compute_pulse_timing_ms(burst_ms, pulse_count)
-
         feedback = IrSignal.Feedback()
         feedback.currentstatus = (
-            f'Starting IR pulse train ({pulse_count} pulses, {on_ms}ms on/{off_ms}ms off)'
+            f'Starting IR signal'
         )
         feedback.progresspercentage = 0.0
         goal_handle.publish_feedback(feedback)
@@ -231,11 +240,11 @@ class IrSignalActionServer(Node):
 
     def _compute_pulse_timing_ms(self, total_window_ms: int, pulse_count: int):
         """Split total window into count pulses + gaps for active-low receiver edge detection."""
-        # For N pulses we need N "on" slots and N-1 "off" gaps.
+        # Keep symmetric burst/gap timing so demodulated receivers see clear pulse edges.
         slots = max(1, (2 * pulse_count) - 1)
         base_ms = max(self.MIN_PULSE_ON_MS, int(total_window_ms / slots))
-        on_ms = base_ms
-        off_ms = base_ms
+        on_ms = max(self.MIN_PULSE_ON_MS, base_ms)
+        off_ms = max(self.MIN_PULSE_OFF_MS, base_ms)
         return on_ms, off_ms
 
     def _send_pulse_train(self, goal_handle, pulse_count: int, on_ms: int, off_ms: int):
@@ -261,8 +270,7 @@ class IrSignalActionServer(Node):
         else:
             signal = f'IR pulses @ {self.frequency_hz}Hz carrier'
         return (
-            f'Sent {pulse_count} {signal} ({on_ms}ms on/{off_ms}ms off) '
-            f'over ~{burst_ms}ms and waited {wait_ms}ms'
+            f'IR signal sent'
         )
 
     def _publish_sim_signal(self, value: int):

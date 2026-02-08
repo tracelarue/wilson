@@ -200,6 +200,7 @@ def generate_launch_description():
             {'burst_duration_ms': 1000},
             {'wait_ms': 5000},
             {'carrier_frequency_hz': 38000},
+            {'trigger_pulse_count': 500},
             {'sim_topic': '/ir_signal'},
             {'use_sim_time': True},
         ],
