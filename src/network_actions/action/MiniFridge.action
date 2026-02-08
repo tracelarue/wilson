@@ -1,0 +1,13 @@
+# Goal: Send a network command to the ESP32 fridge controller
+# Field names have no underscores for MCP compatibility
+string command      # open, close, or toggle
+int32 waitms        # Wait after command in milliseconds (<=0 uses default)
+int32 timeoutms     # Request timeout in milliseconds (<=0 uses default)
+---
+# Result
+bool success
+string message
+---
+# Feedback
+string currentstatus
+float32 progresspercentage

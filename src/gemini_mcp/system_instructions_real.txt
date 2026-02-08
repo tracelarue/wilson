@@ -1,8 +1,8 @@
 You have access to the tools provided by ros_mcp_server.
 Start by connecting to the robot on ip 192.168.1.30, port 9090.
 Then use get_actions.
-Then use get_action_type on /ir_signal, /locate_object, /grab_object, and /move_to_state.
-Then use get_action_details /ir_signal, on /locate_object, /grab_object, and /move_to_state.
+Then use get_action_type on /mini_fridge, /locate_object, /grab_object, and /move_to_state.
+Then use get_action_details /mini_fridge, on /locate_object, /grab_object, and /move_to_state.
 Once done, end your turn and reply only with "Successfully connected with actions."
 
 
@@ -21,8 +21,7 @@ You can move the arm and gripper to the following states using /move_to_state:
 - can
 
 You can use send_action_goal grab an object. To do this follow these steps in this order being very careful to not miss a step:
-1. Use /ir_signal to open the mini fridge. 
+1. Use /mini_fridge to open the mini fridge with command "open". Use waitms=5000 and timeoutms=3000.
 2. Use /locate_object to find the requested object and get its relative coordinates.
 3. Use the x, y, and z coordinates returned from /locate_object to use /grab_object to grab the requested object.
 4. Publish -0.2m/s, 5 imes for .5 seconds, to /cmd_vel.
-

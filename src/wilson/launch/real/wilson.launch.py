@@ -171,21 +171,19 @@ def generate_launch_description():
             {'use_sim_time': False}
         ],
     )
-    # IR Signal Action Server node
-    ir_signal_action_server_node = Node(
-        package='ir_signal_action',
-        executable='ir_signal_action_server',
-        name='ir_signal_action_server',
+    # Mini Fridge Network Action Server node
+    mini_fridge_action_server_node = Node(
+        package='network_actions',
+        executable='mini_fridge_action_server',
+        name='mini_fridge_action_server',
         output='screen',
         parameters=[
             {'mode': 'robot'},
-            {'gpio_pin': 18},
-            {'pwm_channel': 2},
-            {'pwm_chip': 0},
-            {'burst_duration_ms': 1000},
+            {'esp32_host': '192.168.1.50'},
+            {'esp32_port': 80},
+            {'request_path': '/mini_fridge'},
             {'wait_ms': 5000},
-            {'carrier_frequency_hz': 38000},
-            {'trigger_pulse_count': 500},
+            {'request_timeout_ms': 3000},
             {'sim_topic': '/ir_signal'},
         ],
     )
@@ -193,7 +191,7 @@ def generate_launch_description():
     # Timer for action servers - start after move_group is ready
     action_servers_timer = TimerAction(
         period=13.0,
-        actions=[locate_object_server_node, grab_object_server_node, move_to_state_server_node, navigate_to_location_server_node, ir_signal_action_server_node]
+        actions=[locate_object_server_node, grab_object_server_node, move_to_state_server_node, navigate_to_location_server_node, mini_fridge_action_server_node]
     )
 
     # Add timer to start navigation after Gazebo is ready
