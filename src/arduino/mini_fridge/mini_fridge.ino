@@ -1,160 +1,224 @@
 #include <WiFi.h>
 #include <WebServer.h>
+#include <ArduinoOTA.h>
 #include <ESP32Servo.h>
-
-// Configure these for your network.
-const char* WIFI_SSID = "YOUR_WIFI_SSID";
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
-
-const int SERVO_1_PIN = 18;
-const int SERVO_2_PIN = 19;
-
-const int SERVO_1_CLOSED_ANGLE = 0;
-const int SERVO_1_OPEN_ANGLE = 90;
-const int SERVO_2_OPEN_ANGLE = 0;
-const int SERVO_2_CLOSED_ANGLE = 180;
-const int SERVO_2_STEP_DELAY_MS = 10;
+#include <math.h>
+#include "mini_fridge_secrets.h"
 
 WebServer server(80);
 Servo servo1;
 Servo servo2;
 
-int servo1Angle = SERVO_1_CLOSED_ANGLE;
-int servo2Angle = SERVO_2_CLOSED_ANGLE;
-bool doorIsOpen = false;
+const int SERVO1_PIN = D5;   // starts at 0
+const int SERVO2_PIN = D6;   // starts at 180
+const int STEP_DELAY_MS = 500;
+bool isOpen = false;
+bool isBusy = false;
+int d6StepDelayMs = 40;       // lower = faster movement for D6
+int d6Angle = 180;
+bool servosAttached = false;
 
-void moveServoSmooth(Servo& servo, int& currentAngle, int targetAngle, int stepDelayMs) {
-  if (currentAngle == targetAngle) {
+enum LedMode {
+  LED_MODE_OFF,
+  LED_MODE_RED,
+  LED_MODE_GREEN,
+  LED_MODE_BLUE_BREATH
+};
+
+void setLed(LedMode mode) {
+  int red = HIGH;
+  int green = HIGH;
+  int blue = HIGH;
+
+  if (mode == LED_MODE_RED) {
+    red = LOW;
+  } else if (mode == LED_MODE_GREEN) {
+    green = LOW;
+  } else if (mode == LED_MODE_BLUE_BREATH) {
+    float brightness = (exp(sinf(millis() / 1500.0f * PI)) - 0.36787944f) * 108.0f;
+    int pwm = 255 - (int)brightness;  // active-low LED
+    analogWrite(LEDB, constrain(pwm, 0, 255));
+    digitalWrite(LEDR, HIGH);
+    digitalWrite(LEDG, HIGH);
     return;
   }
 
-  int step = (targetAngle > currentAngle) ? 1 : -1;
-  while (currentAngle != targetAngle) {
-    currentAngle += step;
-    servo.write(currentAngle);
-    delay(stepDelayMs);
+  digitalWrite(LEDR, red);
+  digitalWrite(LEDG, green);
+  digitalWrite(LEDB, blue);
+}
+
+void attachServosIfNeeded() {
+  if (servosAttached) {
+    return;
   }
+
+  servo1.attach(SERVO1_PIN);
+  servo2.attach(SERVO2_PIN);
+  servosAttached = true;
 }
 
-bool isAtClosedState() {
-  return (servo1Angle == SERVO_1_CLOSED_ANGLE) && (servo2Angle == SERVO_2_CLOSED_ANGLE);
+void detachServosIfNeeded() {
+  if (!servosAttached) {
+    return;
+  }
+
+  servo1.detach();
+  servo2.detach();
+  servosAttached = false;
 }
 
-bool isAtOpenState() {
-  return (servo1Angle == SERVO_1_CLOSED_ANGLE) && (servo2Angle == SERVO_2_OPEN_ANGLE);
+void openFridge() {
+  attachServosIfNeeded();
+  isBusy = true;
+
+  setLed(LED_MODE_GREEN);
+  Serial.println("SERVO D5 -> 90");
+  servo1.write(90);
+  delay(STEP_DELAY_MS);
+
+  bool ledOn = false;
+  while (d6Angle > 0) {
+    d6Angle--;
+    Serial.print("SERVO D6 -> ");
+    Serial.println(d6Angle);
+    servo2.write(d6Angle);
+    if (ledOn) {
+      setLed(LED_MODE_OFF);
+    } else {
+      setLed(LED_MODE_GREEN);
+    }
+    ledOn = !ledOn;
+    delay(d6StepDelayMs);
+  }
+
+  setLed(LED_MODE_GREEN);
+  Serial.println("SERVO D5 -> 0");
+  servo1.write(0);
+  delay(STEP_DELAY_MS);
+
+  setLed(LED_MODE_OFF);
+  isOpen = true;
+  isBusy = false;
 }
 
-void runDoorOpenSequence() {
-  servo1Angle = SERVO_1_OPEN_ANGLE;
-  servo1.write(servo1Angle);
-  delay(250);
+void closeFridge() {
+  attachServosIfNeeded();
+  isBusy = true;
 
-  moveServoSmooth(servo2, servo2Angle, SERVO_2_OPEN_ANGLE, SERVO_2_STEP_DELAY_MS);
+  bool ledOn = false;
+  while (d6Angle < 180) {
+    d6Angle++;
+    Serial.print("SERVO D6 -> ");
+    Serial.println(d6Angle);
+    servo2.write(d6Angle);
+    if (ledOn) {
+      setLed(LED_MODE_OFF);
+    } else {
+      setLed(LED_MODE_GREEN);
+    }
+    ledOn = !ledOn;
+    delay(d6StepDelayMs);
+  }
 
-  servo1Angle = SERVO_1_CLOSED_ANGLE;
-  servo1.write(servo1Angle);
-  delay(250);
-
-  doorIsOpen = true;
+  setLed(LED_MODE_OFF);
+  isOpen = false;
+  isBusy = false;
 }
 
-void runDoorCloseSequence() {
-  moveServoSmooth(servo2, servo2Angle, SERVO_2_CLOSED_ANGLE, SERVO_2_STEP_DELAY_MS);
-  doorIsOpen = false;
-}
+void handleCommand() {
+  if (!server.hasArg("command")) {
+    server.send(400, "text/plain", "missing command");
+    return;
+  }
 
-String doorStateString() {
-  return doorIsOpen ? "open" : "closed";
-}
+  String command = server.arg("command");
+  command.toLowerCase();
 
-void ensureRequestedState(const String& command) {
+  if (server.hasArg("d6_step_delay_ms")) {
+    int requested = server.arg("d6_step_delay_ms").toInt();
+    if (requested < 1 || requested > 100) {
+      server.send(400, "text/plain", "bad d6_step_delay_ms (use 1..100)");
+      return;
+    }
+    d6StepDelayMs = requested;
+  }
+
   if (command == "open") {
-    if (!doorIsOpen || !isAtOpenState()) {
-      Serial.println("Action: OPENING door");
-      runDoorOpenSequence();
+    Serial.println("COMMAND open");
+    openFridge();
+    server.send(200, "text/plain", "open");
+  } else if (command == "close") {
+    Serial.println("COMMAND close");
+    closeFridge();
+    server.send(200, "text/plain", "close");
+  } else if (command == "toggle") {
+    Serial.println("COMMAND toggle");
+    if (isOpen) {
+      closeFridge();
+      server.send(200, "text/plain", "close");
+    } else {
+      openFridge();
+      server.send(200, "text/plain", "open");
     }
-    return;
+  } else {
+    server.send(400, "text/plain", "bad command");
   }
-
-  if (command == "close") {
-    if (doorIsOpen || !isAtClosedState()) {
-      Serial.println("Action: CLOSING door");
-      runDoorCloseSequence();
-    }
-    return;
-  }
-
-  // toggle
-  if (!doorIsOpen && isAtClosedState()) {
-    Serial.println("Action: OPENING door (toggle)");
-    runDoorOpenSequence();
-  } else if (doorIsOpen && isAtOpenState()) {
-    Serial.println("Action: CLOSING door (toggle)");
-    runDoorCloseSequence();
-  }
-}
-
-void handleMiniFridgeCommand() {
-  String command = "toggle";
-  if (server.hasArg("command")) {
-    command = server.arg("command");
-    command.toLowerCase();
-  }
-
-  if (command != "open" && command != "close" && command != "toggle") {
-    String message = "invalid command: " + command + " (expected open, close, or toggle)";
-    server.send(400, "text/plain", message);
-    return;
-  }
-
-  ensureRequestedState(command);
-
-  String response = "ok command=" + command + " state=" + doorStateString();
-  server.send(200, "text/plain", response);
-}
-
-void handleStatus() {
-  server.send(200, "text/plain", "state=" + doorStateString());
-}
-
-void connectWiFi() {
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Connecting to WiFi");
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  Serial.println();
-  Serial.print("Connected. IP address: ");
-  Serial.println(WiFi.localIP());
 }
 
 void setup() {
   Serial.begin(115200);
 
-  ESP32PWM::allocateTimer(0);
-  ESP32PWM::allocateTimer(1);
-  servo1.setPeriodHertz(50);
-  servo2.setPeriodHertz(50);
+  pinMode(LEDR, OUTPUT);
+  pinMode(LEDG, OUTPUT);
+  pinMode(LEDB, OUTPUT);
+  setLed(LED_MODE_OFF);
 
-  servo1.attach(SERVO_1_PIN, 500, 2400);
-  servo2.attach(SERVO_2_PIN, 500, 2400);
+  WiFi.begin(MINI_FRIDGE_WIFI_SSID, MINI_FRIDGE_WIFI_PASSWORD);
+  bool redOn = false;
+  while (WiFi.status() != WL_CONNECTED) {
+    if (redOn) {
+      setLed(LED_MODE_OFF);
+    } else {
+      setLed(LED_MODE_RED);
+    }
+    redOn = !redOn;
+    delay(500);
+    Serial.print(".");
+  }
+  setLed(LED_MODE_OFF);
 
-  servo1.write(SERVO_1_CLOSED_ANGLE);
-  servo2.write(SERVO_2_CLOSED_ANGLE);
+  ArduinoOTA.setHostname(MINI_FRIDGE_OTA_HOSTNAME);
+  ArduinoOTA.begin();
 
-  connectWiFi();
+  attachServosIfNeeded();
+  Serial.println("SERVO D5 -> 0");
+  servo1.write(0);
+  Serial.println("SERVO D6 -> 180");
+  servo2.write(180);
+  d6Angle = 180;
 
-  server.on("/mini_fridge", HTTP_GET, handleMiniFridgeCommand);
-  server.on("/status", HTTP_GET, handleStatus);
+  server.on("/mini_fridge", HTTP_GET, handleCommand);
   server.begin();
 
-  Serial.println("Mini fridge HTTP server started");
+  setLed(LED_MODE_GREEN);
+  delay(1000);
+  setLed(LED_MODE_OFF);
+  detachServosIfNeeded();
+
+  Serial.println("ready");
+  Serial.println(WiFi.localIP());
 }
 
 void loop() {
+  ArduinoOTA.handle();
   server.handleClient();
+
+  if (!isBusy && WiFi.status() == WL_CONNECTED) {
+    setLed(LED_MODE_BLUE_BREATH);
+  }
+
+  if (!isBusy) {
+    detachServosIfNeeded();
+  }
 }

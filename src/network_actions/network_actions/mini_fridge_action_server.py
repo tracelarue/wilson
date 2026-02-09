@@ -10,7 +10,6 @@ from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
-from std_msgs.msg import Int32
 
 from network_actions.action import MiniFridge
 
@@ -19,38 +18,30 @@ class MiniFridgeActionServer(Node):
     """Action server that controls the mini fridge over network (ESP32)."""
 
     DEFAULT_WAIT_MS = 5000
-    DEFAULT_TIMEOUT_MS = 3000
-    DEFAULT_ESP32_HOST = '192.168.1.50'
+    DEFAULT_TIMEOUT_MS = 12000
+    DEFAULT_ESP32_HOST = '192.168.1.112'
     DEFAULT_ESP32_PORT = 80
     DEFAULT_REQUEST_PATH = '/mini_fridge'
 
     def __init__(self):
         super().__init__('mini_fridge_action_server')
 
-        self.declare_parameter('mode', 'robot')
         self.declare_parameter('esp32_host', self.DEFAULT_ESP32_HOST)
         self.declare_parameter('esp32_port', self.DEFAULT_ESP32_PORT)
         self.declare_parameter('request_path', self.DEFAULT_REQUEST_PATH)
         self.declare_parameter('wait_ms', self.DEFAULT_WAIT_MS)
         self.declare_parameter('request_timeout_ms', self.DEFAULT_TIMEOUT_MS)
-        self.declare_parameter('sim_topic', '/ir_signal')
 
-        self.mode = self.get_parameter('mode').get_parameter_value().string_value.strip().lower()
         self.esp32_host = self.get_parameter('esp32_host').get_parameter_value().string_value.strip()
         self.esp32_port = self.get_parameter('esp32_port').get_parameter_value().integer_value
         self.request_path = self.get_parameter('request_path').get_parameter_value().string_value.strip()
         self.default_wait_ms = self.get_parameter('wait_ms').get_parameter_value().integer_value
         self.default_timeout_ms = self.get_parameter('request_timeout_ms').get_parameter_value().integer_value
-        self.sim_topic = self.get_parameter('sim_topic').get_parameter_value().string_value
 
         if not self.request_path.startswith('/'):
             self.request_path = '/' + self.request_path
 
         self.callback_group = ReentrantCallbackGroup()
-        self.sim_pub = self.create_publisher(Int32, self.sim_topic, 10)
-        self._publish_sim_signal(0)
-
-        self.simulated_door_is_open = False
         self.valid_commands = {'open', 'close', 'toggle'}
 
         self._action_server = ActionServer(
@@ -64,8 +55,8 @@ class MiniFridgeActionServer(Node):
         )
 
         self.get_logger().info(
-            f"Mini fridge action server started (mode={self.mode}, "
-            f"endpoint=http://{self.esp32_host}:{self.esp32_port}{self.request_path})"
+            f"Mini fridge action server started "
+            f"(endpoint=http://{self.esp32_host}:{self.esp32_port}{self.request_path})"
         )
 
     def goal_callback(self, goal_request):
@@ -105,10 +96,7 @@ class MiniFridgeActionServer(Node):
         feedback.progresspercentage = 10.0
         goal_handle.publish_feedback(feedback)
 
-        if self.mode == 'sim':
-            sent_ok, sent_message = self._simulate_command(command)
-        else:
-            sent_ok, sent_message = self._send_command(command, timeout_ms)
+        sent_ok, sent_message = self._send_command(command, timeout_ms)
 
         if not sent_ok:
             result.success = False
@@ -140,24 +128,6 @@ class MiniFridgeActionServer(Node):
         result.message = sent_message
         goal_handle.succeed()
         return result
-
-    def _simulate_command(self, command: str):
-        target_open = self.simulated_door_is_open
-        if command == 'open':
-            target_open = True
-        elif command == 'close':
-            target_open = False
-        else:
-            target_open = not self.simulated_door_is_open
-
-        if target_open != self.simulated_door_is_open:
-            self._publish_sim_signal(1)
-            time.sleep(0.05)
-            self._publish_sim_signal(0)
-
-        self.simulated_door_is_open = target_open
-        state = 'open' if self.simulated_door_is_open else 'closed'
-        return True, f"Simulated mini fridge is now {state}"
 
     def _send_command(self, command: str, timeout_ms: int):
         timeout_sec = max(0.1, float(timeout_ms) / 1000.0)
@@ -192,12 +162,6 @@ class MiniFridgeActionServer(Node):
                 return False
             time.sleep(0.1)
         return True
-
-    def _publish_sim_signal(self, value: int):
-        msg = Int32()
-        msg.data = int(value)
-        self.sim_pub.publish(msg)
-
 
 def main(args=None):
     rclpy.init(args=args)
