@@ -219,4 +219,5 @@ __marimo__/
 core
 src/arduino/MLX90393v3.zip
 src/arduino/MLX90393.zip
+src/arduino/mini_fridge/mini_fridge_secrets.h
 wilson_code_workspace.code-workspace
