@@ -49,7 +49,7 @@ def generate_launch_description():
         package='rviz2',
         executable='rviz2',
         name='rviz2',
-        arguments=['-d', os.path.join(pkg_path, 'config', 'rviz', 'sim.rviz'), '--ros-args', '--log-level', 'WARN'],
+        arguments=['-d', os.path.join(pkg_path, 'config', 'rviz', 'sim.rviz'), '--ros-args', '--log-level', 'ERROR'],
         parameters=[{'use_sim_time': use_sim_time}],
     )
     
