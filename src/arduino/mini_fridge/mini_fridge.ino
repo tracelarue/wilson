@@ -9,14 +9,13 @@ WebServer server(80);
 Servo servo1;
 Servo servo2;
 
-const int SERVO1_PIN = D5;   // starts at 0
-const int SERVO2_PIN = D6;   // starts at 180
+const int SERVO1_PIN = 9;   // starts at 0
+const int SERVO2_PIN = 10;   // starts at 180
 const int STEP_DELAY_MS = 500;
 bool isOpen = false;
 bool isBusy = false;
 int d6StepDelayMs = 40;       // lower = faster movement for D6
 int d6Angle = 180;
-bool servosAttached = false;
 
 enum LedMode {
   LED_MODE_OFF,
@@ -48,28 +47,7 @@ void setLed(LedMode mode) {
   digitalWrite(LEDB, blue);
 }
 
-void attachServosIfNeeded() {
-  if (servosAttached) {
-    return;
-  }
-
-  servo1.attach(SERVO1_PIN);
-  servo2.attach(SERVO2_PIN);
-  servosAttached = true;
-}
-
-void detachServosIfNeeded() {
-  if (!servosAttached) {
-    return;
-  }
-
-  servo1.detach();
-  servo2.detach();
-  servosAttached = false;
-}
-
 void openFridge() {
-  attachServosIfNeeded();
   isBusy = true;
 
   setLed(LED_MODE_GREEN);
@@ -103,7 +81,6 @@ void openFridge() {
 }
 
 void closeFridge() {
-  attachServosIfNeeded();
   isBusy = true;
 
   bool ledOn = false;
@@ -191,7 +168,8 @@ void setup() {
   ArduinoOTA.setHostname(MINI_FRIDGE_OTA_HOSTNAME);
   ArduinoOTA.begin();
 
-  attachServosIfNeeded();
+  servo1.attach(SERVO1_PIN);
+  servo2.attach(SERVO2_PIN);
   Serial.println("SERVO D5 -> 0");
   servo1.write(0);
   Serial.println("SERVO D6 -> 180");
@@ -204,7 +182,6 @@ void setup() {
   setLed(LED_MODE_GREEN);
   delay(1000);
   setLed(LED_MODE_OFF);
-  detachServosIfNeeded();
 
   Serial.println("ready");
   Serial.println(WiFi.localIP());
@@ -216,9 +193,5 @@ void loop() {
 
   if (!isBusy && WiFi.status() == WL_CONNECTED) {
     setLed(LED_MODE_BLUE_BREATH);
-  }
-
-  if (!isBusy) {
-    detachServosIfNeeded();
   }
 }
