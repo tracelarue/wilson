@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import math
 import threading
 import tkinter as tk
 from tkinter import ttk
@@ -10,7 +11,7 @@ from rclpy.node import Node
 
 
 class TeleopGuiNode(Node):
-    """Publishes Twist commands based on GUI button presses."""
+    """Publishes Twist commands based on GUI interactions."""
 
     def __init__(self) -> None:
         super().__init__("wilson_teleop_gui")
@@ -18,12 +19,19 @@ class TeleopGuiNode(Node):
         self.declare_parameter("cmd_vel_topic", "/cmd_vel")
         self.declare_parameter("linear_speed", 0.25)
         self.declare_parameter("angular_speed", 0.9)
+        self.declare_parameter("linear_deadband", 0.1)
+        self.declare_parameter("angular_deadband", 0.1)
         self.declare_parameter("publish_rate_hz", 20.0)
 
         self.cmd_vel_topic = self.get_parameter("cmd_vel_topic").get_parameter_value().string_value
         self.linear_speed = self.get_parameter("linear_speed").get_parameter_value().double_value
         self.angular_speed = self.get_parameter("angular_speed").get_parameter_value().double_value
+        self.linear_deadband = self.get_parameter("linear_deadband").get_parameter_value().double_value
+        self.angular_deadband = self.get_parameter("angular_deadband").get_parameter_value().double_value
         self.publish_rate = self.get_parameter("publish_rate_hz").get_parameter_value().double_value
+
+        self.linear_deadband = min(max(self.linear_deadband, 0.0), 0.95)
+        self.angular_deadband = min(max(self.angular_deadband, 0.0), 0.95)
 
         self._publisher = self.create_publisher(Twist, self.cmd_vel_topic, 10)
         self._cmd_lock = threading.Lock()
@@ -36,6 +44,7 @@ class TeleopGuiNode(Node):
         self.get_logger().info(
             f"Teleop GUI publishing Twist to {self.cmd_vel_topic} "
             f"(linear_speed={self.linear_speed}, angular_speed={self.angular_speed}, "
+            f"linear_deadband={self.linear_deadband}, angular_deadband={self.angular_deadband}, "
             f"rate={self.publish_rate}Hz)"
         )
 
@@ -61,20 +70,23 @@ class TeleopGuiNode(Node):
 
 
 class TeleopGuiApp:
-    """Simple Tkinter front-end for differential-drive teleoperation."""
+    """Tkinter front-end with virtual joystick for diff-drive teleoperation."""
 
     def __init__(self, node: TeleopGuiNode) -> None:
         self._node = node
-        self._active_button = None
         self._root = tk.Tk()
         self._root.title("Wilson Teleop")
-        self._root.geometry("420x360")
-        self._root.minsize(360, 320)
+        self._root.geometry("440x620")
+        self._root.minsize(400, 560)
         self._root.configure(bg="#ecf2f5")
+
+        self._joy_center = (160, 160)
+        self._joy_radius = 120
+        self._joy_knob_radius = 22
+        self._joy_active = False
 
         self._init_style()
         self._build_layout()
-        self._bind_keyboard()
 
         self._root.protocol("WM_DELETE_WINDOW", self._on_close)
         self._root.bind("<FocusOut>", self._on_focus_out)
@@ -102,138 +114,190 @@ class TeleopGuiApp:
             foreground="#335266",
             font=("Helvetica", 10),
         )
-        style.configure(
-            "Move.TButton",
-            font=("Helvetica", 11, "bold"),
-            padding=(10, 10),
-        )
-        style.configure("Stop.TButton", font=("Helvetica", 11, "bold"), padding=(10, 10))
 
     def _build_layout(self) -> None:
         frame = ttk.Frame(self._root, style="Main.TFrame", padding=12)
         frame.pack(fill=tk.BOTH, expand=True)
         frame.columnconfigure(0, weight=1)
         frame.columnconfigure(1, weight=1)
-        frame.columnconfigure(2, weight=1)
 
         title = ttk.Label(frame, text="Differential Drive Teleop", style="Header.TLabel")
-        title.grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 3))
+        title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
 
         hint = ttk.Label(
             frame,
-            text="Press and hold buttons. Release to stop. Keyboard: W/A/S/D + Q/E/Z/C.",
+            text="Drag the joystick to drive. Release to stop.",
             style="Hint.TLabel",
         )
-        hint.grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 10))
+        hint.grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
-        self._add_move_button(frame, "FWD LEFT", 2, 0, 1.0, 1.0)
-        self._add_move_button(frame, "FORWARD", 2, 1, 1.0, 0.0)
-        self._add_move_button(frame, "FWD RIGHT", 2, 2, 1.0, -1.0)
-
-        self._add_move_button(frame, "LEFT", 3, 0, 0.0, 1.0)
-        stop_btn = ttk.Button(frame, text="STOP", style="Stop.TButton", command=self._on_release)
-        stop_btn.grid(row=3, column=1, padx=5, pady=5, sticky="nsew")
-        self._add_move_button(frame, "RIGHT", 3, 2, 0.0, -1.0)
-
-        self._add_move_button(frame, "REV LEFT", 4, 0, -1.0, 1.0)
-        self._add_move_button(frame, "REVERSE", 4, 1, -1.0, 0.0)
-        self._add_move_button(frame, "REV RIGHT", 4, 2, -1.0, -1.0)
+        self._build_joystick(frame)
 
         self._linear_speed_var = tk.DoubleVar(value=self._node.linear_speed)
         self._angular_speed_var = tk.DoubleVar(value=self._node.angular_speed)
+        self._linear_deadband_var = tk.DoubleVar(value=self._node.linear_deadband)
+        self._angular_deadband_var = tk.DoubleVar(value=self._node.angular_deadband)
         self._linear_speed_text = tk.StringVar()
         self._angular_speed_text = tk.StringVar()
-        self._update_speed_labels()
+        self._linear_deadband_text = tk.StringVar()
+        self._angular_deadband_text = tk.StringVar()
+        self._update_tuning_labels()
 
-        linear_label = ttk.Label(frame, text="Linear Speed", style="Hint.TLabel")
-        linear_label.grid(row=5, column=0, sticky="w", pady=(8, 2))
+        linear_label = ttk.Label(frame, text="Max Linear Speed", style="Hint.TLabel")
+        linear_label.grid(row=3, column=0, sticky="w", pady=(8, 2))
         linear_value = ttk.Label(frame, textvariable=self._linear_speed_text, style="Hint.TLabel")
-        linear_value.grid(row=5, column=2, sticky="e", pady=(8, 2))
+        linear_value.grid(row=3, column=1, sticky="e", pady=(8, 2))
+
         linear_slider = ttk.Scale(
             frame,
             from_=0.0,
             to=1.0,
             orient=tk.HORIZONTAL,
             variable=self._linear_speed_var,
-            command=lambda _v: self._update_speed_labels(),
+            command=lambda _v: self._on_tuning_changed(),
         )
-        linear_slider.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(0, 6))
+        linear_slider.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(0, 6))
 
-        angular_label = ttk.Label(frame, text="Angular Speed", style="Hint.TLabel")
-        angular_label.grid(row=7, column=0, sticky="w", pady=(4, 2))
+        angular_label = ttk.Label(frame, text="Max Angular Speed", style="Hint.TLabel")
+        angular_label.grid(row=5, column=0, sticky="w", pady=(4, 2))
         angular_value = ttk.Label(frame, textvariable=self._angular_speed_text, style="Hint.TLabel")
-        angular_value.grid(row=7, column=2, sticky="e", pady=(4, 2))
+        angular_value.grid(row=5, column=1, sticky="e", pady=(4, 2))
+
         angular_slider = ttk.Scale(
             frame,
             from_=0.0,
             to=2.5,
             orient=tk.HORIZONTAL,
             variable=self._angular_speed_var,
-            command=lambda _v: self._update_speed_labels(),
+            command=lambda _v: self._on_tuning_changed(),
         )
-        angular_slider.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(0, 6))
+        angular_slider.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(0, 8))
 
-        status_frame = ttk.Frame(frame, style="Main.TFrame")
-        status_frame.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        linear_deadband_label = ttk.Label(frame, text="Linear Deadband", style="Hint.TLabel")
+        linear_deadband_label.grid(row=7, column=0, sticky="w", pady=(4, 2))
+        linear_deadband_value = ttk.Label(
+            frame, textvariable=self._linear_deadband_text, style="Hint.TLabel"
+        )
+        linear_deadband_value.grid(row=7, column=1, sticky="e", pady=(4, 2))
+
+        linear_deadband_slider = ttk.Scale(
+            frame,
+            from_=0.0,
+            to=0.35,
+            orient=tk.HORIZONTAL,
+            variable=self._linear_deadband_var,
+            command=lambda _v: self._on_tuning_changed(),
+        )
+        linear_deadband_slider.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+
+        angular_deadband_label = ttk.Label(frame, text="Angular Deadband", style="Hint.TLabel")
+        angular_deadband_label.grid(row=9, column=0, sticky="w", pady=(4, 2))
+        angular_deadband_value = ttk.Label(
+            frame, textvariable=self._angular_deadband_text, style="Hint.TLabel"
+        )
+        angular_deadband_value.grid(row=9, column=1, sticky="e", pady=(4, 2))
+
+        angular_deadband_slider = ttk.Scale(
+            frame,
+            from_=0.0,
+            to=0.35,
+            orient=tk.HORIZONTAL,
+            variable=self._angular_deadband_var,
+            command=lambda _v: self._on_tuning_changed(),
+        )
+        angular_deadband_slider.grid(row=10, column=0, columnspan=2, sticky="ew", pady=(0, 8))
 
         self._status = tk.StringVar(value=self._status_text(0.0, 0.0))
-        status_label = ttk.Label(status_frame, textvariable=self._status, style="Hint.TLabel")
-        status_label.pack(anchor="w")
+        status_label = ttk.Label(frame, textvariable=self._status, style="Hint.TLabel")
+        status_label.grid(row=11, column=0, columnspan=2, sticky="w")
 
-    def _bind_keyboard(self) -> None:
-        key_map = {
-            "w": (1.0, 0.0),
-            "a": (0.0, 1.0),
-            "s": (-1.0, 0.0),
-            "d": (0.0, -1.0),
-            "q": (1.0, 1.0),
-            "e": (1.0, -1.0),
-            "z": (-1.0, 1.0),
-            "c": (-1.0, -1.0),
-        }
-
-        def on_key_press(evt: tk.Event) -> None:
-            key = evt.keysym.lower()
-            if key in key_map:
-                linear_factor, angular_factor = key_map[key]
-                self._on_press(linear_factor, angular_factor)
-            elif key == "space":
-                self._on_release()
-
-        self._root.bind("<KeyPress>", on_key_press)
-        self._root.bind("<KeyRelease>", lambda _evt: self._on_release())
-
-    def _add_move_button(
-        self,
-        parent: ttk.Frame,
-        text: str,
-        row: int,
-        col: int,
-        linear_factor: float,
-        angular_factor: float,
-    ) -> None:
-        btn = ttk.Button(parent, text=text, style="Move.TButton")
-        btn.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
-        btn.bind(
-            "<ButtonPress-1>",
-            lambda evt: self._on_press(linear_factor, angular_factor, evt.widget),
+    def _build_joystick(self, parent: ttk.Frame) -> None:
+        self._canvas = tk.Canvas(
+            parent,
+            width=320,
+            height=320,
+            bg="#f7fbfd",
+            highlightthickness=1,
+            highlightbackground="#aac2cf",
         )
-        btn.bind("<ButtonRelease-1>", lambda evt: self._on_release(evt.widget))
-        btn.bind("<Leave>", lambda evt: self._on_release(evt.widget))
+        self._canvas.grid(row=2, column=0, columnspan=2, pady=(0, 6))
 
-    def _on_press(self, linear_factor: float, angular_factor: float, source=None) -> None:
-        self._active_button = source
-        linear = linear_factor * self._linear_speed_var.get()
-        angular = angular_factor * self._angular_speed_var.get()
+        cx, cy = self._joy_center
+        r = self._joy_radius
+
+        self._canvas.create_oval(cx - r, cy - r, cx + r, cy + r, outline="#4f7486", width=2)
+        self._canvas.create_line(cx - r, cy, cx + r, cy, fill="#9ab3bf", width=1)
+        self._canvas.create_line(cx, cy - r, cx, cy + r, fill="#9ab3bf", width=1)
+
+        kr = self._joy_knob_radius
+        self._knob_id = self._canvas.create_oval(
+            cx - kr,
+            cy - kr,
+            cx + kr,
+            cy + kr,
+            fill="#0d6b94",
+            outline="#084c69",
+            width=2,
+        )
+
+        self._canvas.bind("<ButtonPress-1>", self._on_joystick_press)
+        self._canvas.bind("<B1-Motion>", self._on_joystick_drag)
+        self._canvas.bind("<ButtonRelease-1>", self._on_joystick_release)
+
+    def _on_joystick_press(self, event: tk.Event) -> None:
+        self._joy_active = True
+        self._apply_joystick_position(event.x, event.y)
+
+    def _on_joystick_drag(self, event: tk.Event) -> None:
+        if not self._joy_active:
+            return
+        self._apply_joystick_position(event.x, event.y)
+
+    def _on_joystick_release(self, _event: tk.Event) -> None:
+        self._joy_active = False
+        self._reset_joystick()
+
+    def _apply_joystick_position(self, x: float, y: float) -> None:
+        cx, cy = self._joy_center
+        dx = x - cx
+        dy = y - cy
+
+        distance = math.hypot(dx, dy)
+        if distance > self._joy_radius and distance > 0.0:
+            scale = self._joy_radius / distance
+            dx *= scale
+            dy *= scale
+
+        self._move_knob(cx + dx, cy + dy)
+
+        x_norm = dx / self._joy_radius
+        y_norm = -dy / self._joy_radius
+
+        y_norm = self._apply_axis_deadband(y_norm, self._linear_deadband_var.get())
+        x_norm = self._apply_axis_deadband(x_norm, self._angular_deadband_var.get())
+
+        linear = y_norm * self._linear_speed_var.get()
+        angular = -x_norm * self._angular_speed_var.get()
         self._node.command(linear, angular, publish_now=True)
         self._status.set(self._status_text(linear, angular))
 
-    def _on_release(self, source=None) -> None:
-        if source is not None and self._active_button is not None and source is not self._active_button:
-            return
-        self._active_button = None
+    def _move_knob(self, x: float, y: float) -> None:
+        kr = self._joy_knob_radius
+        self._canvas.coords(self._knob_id, x - kr, y - kr, x + kr, y + kr)
+
+    def _reset_joystick(self) -> None:
+        cx, cy = self._joy_center
+        self._move_knob(cx, cy)
         self._node.stop()
         self._status.set(self._status_text(0.0, 0.0))
+
+    def _on_tuning_changed(self) -> None:
+        self._update_tuning_labels()
+        if self._joy_active:
+            knob = self._canvas.coords(self._knob_id)
+            x = (knob[0] + knob[2]) / 2.0
+            y = (knob[1] + knob[3]) / 2.0
+            self._apply_joystick_position(x, y)
 
     @staticmethod
     def _status_text(linear: float, angular: float) -> str:
@@ -244,12 +308,23 @@ class TeleopGuiApp:
         self._root.quit()
         self._root.destroy()
 
-    def _update_speed_labels(self) -> None:
+    def _update_tuning_labels(self) -> None:
         self._linear_speed_text.set(f"{self._linear_speed_var.get():.2f} m/s")
         self._angular_speed_text.set(f"{self._angular_speed_var.get():.2f} rad/s")
+        self._linear_deadband_text.set(f"{self._linear_deadband_var.get():.2f}")
+        self._angular_deadband_text.set(f"{self._angular_deadband_var.get():.2f}")
+
+    @staticmethod
+    def _apply_axis_deadband(value: float, deadband: float) -> float:
+        magnitude = abs(value)
+        if magnitude <= deadband:
+            return 0.0
+        if deadband >= 1.0:
+            return 0.0
+        scaled = (magnitude - deadband) / (1.0 - deadband)
+        return math.copysign(scaled, value)
 
     def _on_focus_out(self, _evt) -> None:
-        # Defer until focus settles; only stop if focus left this window.
         self._root.after_idle(self._stop_if_focus_left_window)
 
     def _stop_if_focus_left_window(self) -> None:
@@ -259,7 +334,8 @@ class TeleopGuiApp:
             if current is self._root:
                 return
             current = current.master
-        self._on_release()
+        self._joy_active = False
+        self._reset_joystick()
 
 
 def main(args=None) -> None:

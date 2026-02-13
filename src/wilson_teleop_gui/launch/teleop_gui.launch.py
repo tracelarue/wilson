@@ -20,6 +20,16 @@ def generate_launch_description():
         default_value="0.9",
         description="Angular speed in rad/s",
     )
+    linear_deadband_arg = DeclareLaunchArgument(
+        "linear_deadband",
+        default_value="0.1",
+        description="Linear axis deadband in normalized joystick units [0..1)",
+    )
+    angular_deadband_arg = DeclareLaunchArgument(
+        "angular_deadband",
+        default_value="0.1",
+        description="Angular axis deadband in normalized joystick units [0..1)",
+    )
     publish_rate_arg = DeclareLaunchArgument(
         "publish_rate_hz",
         default_value="20.0",
@@ -36,6 +46,8 @@ def generate_launch_description():
                 "cmd_vel_topic": LaunchConfiguration("cmd_vel_topic"),
                 "linear_speed": LaunchConfiguration("linear_speed"),
                 "angular_speed": LaunchConfiguration("angular_speed"),
+                "linear_deadband": LaunchConfiguration("linear_deadband"),
+                "angular_deadband": LaunchConfiguration("angular_deadband"),
                 "publish_rate_hz": LaunchConfiguration("publish_rate_hz"),
             }
         ],
@@ -46,6 +58,8 @@ def generate_launch_description():
             cmd_vel_topic_arg,
             linear_speed_arg,
             angular_speed_arg,
+            linear_deadband_arg,
+            angular_deadband_arg,
             publish_rate_arg,
             teleop_node,
         ]
