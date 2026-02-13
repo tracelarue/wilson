@@ -299,5 +299,5 @@ def generate_launch_description():
         # Optional components
         #teleop,
         rosbridge_timer,
-        gemini_ros_mcp_timer
+        #gemini_ros_mcp_timer
     ])
