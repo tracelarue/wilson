@@ -29,7 +29,7 @@ def generate_launch_description():
     )
     angular_speed_arg = DeclareLaunchArgument(
         "angular_speed",
-        default_value="0.9",
+        default_value="0.25",
         description="Angular speed in rad/s",
     )
     linear_deadband_arg = DeclareLaunchArgument(

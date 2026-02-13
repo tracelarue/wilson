@@ -18,7 +18,7 @@ class TeleopGuiNode(Node):
 
         self.declare_parameter("cmd_vel_topic", "/cmd_vel")
         self.declare_parameter("linear_speed", 0.25)
-        self.declare_parameter("angular_speed", 0.9)
+        self.declare_parameter("angular_speed", 0.25)
         self.declare_parameter("linear_deadband", 0.1)
         self.declare_parameter("angular_deadband", 0.1)
         self.declare_parameter("publish_rate_hz", 20.0)
@@ -76,14 +76,16 @@ class TeleopGuiApp:
         self._node = node
         self._root = tk.Tk()
         self._root.title("Wilson Teleop")
-        self._root.geometry("440x620")
-        self._root.minsize(400, 560)
+        self._root.geometry("700x620")
+        self._root.minsize(640, 560)
         self._root.configure(bg="#ecf2f5")
 
         self._joy_center = (160, 160)
         self._joy_radius = 120
         self._joy_knob_radius = 22
         self._joy_active = False
+        self._active_button_id = None
+        self._active_button_factors = None
 
         self._init_style()
         self._build_layout()
@@ -118,7 +120,7 @@ class TeleopGuiApp:
     def _build_layout(self) -> None:
         frame = ttk.Frame(self._root, style="Main.TFrame", padding=12)
         frame.pack(fill=tk.BOTH, expand=True)
-        frame.columnconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=0)
         frame.columnconfigure(1, weight=1)
 
         title = ttk.Label(frame, text="Differential Drive Teleop", style="Header.TLabel")
@@ -126,12 +128,16 @@ class TeleopGuiApp:
 
         hint = ttk.Label(
             frame,
-            text="Drag the joystick to drive. Release to stop.",
+            text="Use button pad or joystick. Press/hold to drive. Release to stop.",
             style="Hint.TLabel",
         )
         hint.grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
-        self._build_joystick(frame)
+        button_pad = ttk.Frame(frame, style="Main.TFrame")
+        button_pad.grid(row=2, column=0, sticky="n", padx=(0, 10), pady=(0, 6))
+        self._build_button_pad(button_pad)
+
+        self._build_joystick(frame, row=2, col=1)
 
         self._linear_speed_var = tk.DoubleVar(value=self._node.linear_speed)
         self._angular_speed_var = tk.DoubleVar(value=self._node.angular_speed)
@@ -211,7 +217,47 @@ class TeleopGuiApp:
         status_label = ttk.Label(frame, textvariable=self._status, style="Hint.TLabel")
         status_label.grid(row=11, column=0, columnspan=2, sticky="w")
 
-    def _build_joystick(self, parent: ttk.Frame) -> None:
+    def _build_button_pad(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(1, weight=1)
+        parent.columnconfigure(2, weight=1)
+
+        pad_title = ttk.Label(parent, text="Button Pad", style="Hint.TLabel")
+        pad_title.grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 4))
+
+        self._add_move_button(parent, "FWD LEFT", 1, 0, 1.0, 1.0, "fwd_left")
+        self._add_move_button(parent, "FORWARD", 1, 1, 1.0, 0.0, "forward")
+        self._add_move_button(parent, "FWD RIGHT", 1, 2, 1.0, -1.0, "fwd_right")
+
+        self._add_move_button(parent, "LEFT", 2, 0, 0.0, 1.0, "left")
+        stop_btn = ttk.Button(parent, text="STOP", command=self._stop_motion)
+        stop_btn.grid(row=2, column=1, padx=4, pady=4, sticky="nsew")
+        self._add_move_button(parent, "RIGHT", 2, 2, 0.0, -1.0, "right")
+
+        self._add_move_button(parent, "REV LEFT", 3, 0, -1.0, 1.0, "rev_left")
+        self._add_move_button(parent, "REVERSE", 3, 1, -1.0, 0.0, "reverse")
+        self._add_move_button(parent, "REV RIGHT", 3, 2, -1.0, -1.0, "rev_right")
+
+    def _add_move_button(
+        self,
+        parent: ttk.Frame,
+        text: str,
+        row: int,
+        col: int,
+        linear_factor: float,
+        angular_factor: float,
+        button_id: str,
+    ) -> None:
+        btn = ttk.Button(parent, text=text)
+        btn.grid(row=row, column=col, padx=4, pady=4, sticky="nsew")
+        btn.bind(
+            "<ButtonPress-1>",
+            lambda _evt: self._on_button_press(linear_factor, angular_factor, button_id),
+        )
+        btn.bind("<ButtonRelease-1>", lambda _evt: self._on_button_release(button_id))
+        btn.bind("<Leave>", lambda _evt: self._on_button_release(button_id))
+
+    def _build_joystick(self, parent: ttk.Frame, row: int, col: int) -> None:
         self._canvas = tk.Canvas(
             parent,
             width=320,
@@ -220,7 +266,7 @@ class TeleopGuiApp:
             highlightthickness=1,
             highlightbackground="#aac2cf",
         )
-        self._canvas.grid(row=2, column=0, columnspan=2, pady=(0, 6))
+        self._canvas.grid(row=row, column=col, sticky="n", pady=(0, 6))
 
         cx, cy = self._joy_center
         r = self._joy_radius
@@ -246,6 +292,8 @@ class TeleopGuiApp:
 
     def _on_joystick_press(self, event: tk.Event) -> None:
         self._joy_active = True
+        self._active_button_id = None
+        self._active_button_factors = None
         self._apply_joystick_position(event.x, event.y)
 
     def _on_joystick_drag(self, event: tk.Event) -> None:
@@ -255,7 +303,7 @@ class TeleopGuiApp:
 
     def _on_joystick_release(self, _event: tk.Event) -> None:
         self._joy_active = False
-        self._reset_joystick()
+        self._reset_joystick(stop_robot=True)
 
     def _apply_joystick_position(self, x: float, y: float) -> None:
         cx, cy = self._joy_center
@@ -281,15 +329,42 @@ class TeleopGuiApp:
         self._node.command(linear, angular, publish_now=True)
         self._status.set(self._status_text(linear, angular))
 
+    def _on_button_press(self, linear_factor: float, angular_factor: float, button_id: str) -> None:
+        self._joy_active = False
+        self._active_button_id = button_id
+        self._active_button_factors = (linear_factor, angular_factor)
+        self._reset_joystick(stop_robot=False)
+        self._apply_button_command(linear_factor, angular_factor)
+
+    def _on_button_release(self, button_id: str) -> None:
+        if self._active_button_id != button_id:
+            return
+        self._active_button_id = None
+        self._active_button_factors = None
+        self._stop_motion()
+
+    def _apply_button_command(self, linear_factor: float, angular_factor: float) -> None:
+        linear = linear_factor * self._linear_speed_var.get()
+        angular = angular_factor * self._angular_speed_var.get()
+        self._node.command(linear, angular, publish_now=True)
+        self._status.set(self._status_text(linear, angular))
+
     def _move_knob(self, x: float, y: float) -> None:
         kr = self._joy_knob_radius
         self._canvas.coords(self._knob_id, x - kr, y - kr, x + kr, y + kr)
 
-    def _reset_joystick(self) -> None:
+    def _reset_joystick(self, stop_robot: bool) -> None:
         cx, cy = self._joy_center
         self._move_knob(cx, cy)
-        self._node.stop()
-        self._status.set(self._status_text(0.0, 0.0))
+        if stop_robot:
+            self._node.stop()
+            self._status.set(self._status_text(0.0, 0.0))
+
+    def _stop_motion(self) -> None:
+        self._joy_active = False
+        self._active_button_id = None
+        self._active_button_factors = None
+        self._reset_joystick(stop_robot=True)
 
     def _on_tuning_changed(self) -> None:
         self._update_tuning_labels()
@@ -298,6 +373,9 @@ class TeleopGuiApp:
             x = (knob[0] + knob[2]) / 2.0
             y = (knob[1] + knob[3]) / 2.0
             self._apply_joystick_position(x, y)
+        elif self._active_button_factors is not None:
+            linear_factor, angular_factor = self._active_button_factors
+            self._apply_button_command(linear_factor, angular_factor)
 
     @staticmethod
     def _status_text(linear: float, angular: float) -> str:
@@ -334,8 +412,7 @@ class TeleopGuiApp:
             if current is self._root:
                 return
             current = current.master
-        self._joy_active = False
-        self._reset_joystick()
+        self._stop_motion()
 
 
 def main(args=None) -> None:

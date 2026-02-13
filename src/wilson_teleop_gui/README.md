@@ -30,5 +30,5 @@ ros2 launch wilson_teleop_gui with_robot.launch.py
 
 - `cmd_vel_topic:=/cmd_vel`
 - `linear_speed:=0.25`
-- `angular_speed:=0.9`
+- `angular_speed:=0.25`
 - `publish_rate_hz:=20.0` (GUI-only launch)
