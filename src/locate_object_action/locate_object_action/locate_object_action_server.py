@@ -128,6 +128,24 @@ class LocateObjectActionServer(Node):
             marker_qos
         )
 
+        # Optional debug image publishers (annotated RGB/depth frames)
+        self.debug_rgb_publisher = None
+        self.debug_depth_publisher = None
+        if self.enable_debug_frames:
+            self.debug_rgb_publisher = self.create_publisher(
+                Image,
+                self.debug_rgb_topic,
+                image_qos
+            )
+            self.debug_depth_publisher = self.create_publisher(
+                Image,
+                self.debug_depth_topic,
+                image_qos
+            )
+            self.get_logger().info(
+                f'Debug frames enabled: rgb={self.debug_rgb_topic}, depth={self.debug_depth_topic}'
+            )
+
         # Action server
         self._action_server = ActionServer(
             self,
@@ -151,10 +169,15 @@ class LocateObjectActionServer(Node):
 
         # Control parameters
         self.declare_parameter('k_linear', 0.3)
+        self.declare_parameter('k_linear_i', 0.0)
         self.declare_parameter('k_angular', 1.0)
+        self.declare_parameter('k_angular_i', 0.0)
+        self.declare_parameter('linear_integral_limit', 0.2)
+        self.declare_parameter('angular_integral_limit', 0.2)
         self.declare_parameter('max_linear_vel', 0.3)
         self.declare_parameter('max_angular_vel', 0.5)
         self.declare_parameter('min_movement_threshold', 0.005)
+        self.declare_parameter('z_offset_correction', 0.033)  # Compensates from can center to front edge
 
         # Camera parameters
         self.declare_parameter('h_fov', 1.089)  # Horizontal field of view in radians
@@ -168,6 +191,11 @@ class LocateObjectActionServer(Node):
         # Y-value override parameters
         self.declare_parameter('override_y_value', False)  # Enable/disable Y-value override
         self.declare_parameter('fixed_y_value', 0.1)  # Fixed Y value in meters when override is enabled
+
+        # Debug visualization parameters
+        self.declare_parameter('enable_debug_frames', False)
+        self.declare_parameter('debug_rgb_topic', '/locate_object/debug/rgb')
+        self.declare_parameter('debug_depth_topic', '/locate_object/debug/depth')
 
         # Operation parameters
         self.declare_parameter('max_detection_attempts', 5)
@@ -186,10 +214,15 @@ class LocateObjectActionServer(Node):
 
         # Control gains
         self.k_linear = self.get_parameter('k_linear').value
+        self.k_linear_i = self.get_parameter('k_linear_i').value
         self.k_angular = self.get_parameter('k_angular').value
+        self.k_angular_i = self.get_parameter('k_angular_i').value
+        self.linear_integral_limit = self.get_parameter('linear_integral_limit').value
+        self.angular_integral_limit = self.get_parameter('angular_integral_limit').value
         self.max_linear_vel = self.get_parameter('max_linear_vel').value
         self.max_angular_vel = self.get_parameter('max_angular_vel').value
         self.min_movement_threshold = self.get_parameter('min_movement_threshold').value
+        self.z_offset_correction = self.get_parameter('z_offset_correction').value
 
         # Camera parameters
         self.h_fov = self.get_parameter('h_fov').value
@@ -205,12 +238,26 @@ class LocateObjectActionServer(Node):
         self.override_y_value = self.get_parameter('override_y_value').value
         self.fixed_y_value = self.get_parameter('fixed_y_value').value
 
+        # Debug visualization parameters
+        self.enable_debug_frames = self.get_parameter('enable_debug_frames').value
+        self.debug_rgb_topic = self.get_parameter('debug_rgb_topic').value
+        self.debug_depth_topic = self.get_parameter('debug_depth_topic').value
+
         # Operation parameters
         self.max_detection_attempts = self.get_parameter('max_detection_attempts').value
         self.control_loop_rate = self.get_parameter('control_loop_rate').value
         self.overall_timeout = self.get_parameter('overall_timeout').value
         self.api_timeout = self.get_parameter('api_timeout').value
         self.movement_settle_time = self.get_parameter('movement_settle_time').value
+
+        # Internal PI controller state
+        self.linear_error_integral = 0.0
+        self.angular_error_integral = 0.0
+
+    def _reset_controller_state(self):
+        """Reset PI controller integrator state between goals/failures."""
+        self.linear_error_integral = 0.0
+        self.angular_error_integral = 0.0
 
     def rgb_image_callback(self, msg):
         """Callback for RGB camera images."""
@@ -249,6 +296,7 @@ class LocateObjectActionServer(Node):
         # Initialize feedback
         feedback = LocateObject.Feedback()
         feedback.detection_attempts = 0
+        self._reset_controller_state()
 
         # Wait for camera data
         if not self._wait_for_camera_data(timeout=5.0):
@@ -288,6 +336,7 @@ class LocateObjectActionServer(Node):
                 detection_result = self._detect_and_localize_drink(goal_handle.request.objectname)
 
                 if detection_result is None:
+                    self._reset_controller_state()
                     # Detection failed
                     if feedback.detection_attempts >= self.max_detection_attempts:
                         result.message = f'Failed to detect {goal_handle.request.objectname} after {feedback.detection_attempts} attempts'
@@ -304,9 +353,8 @@ class LocateObjectActionServer(Node):
                 # Successfully detected drink
                 current_x, current_y, current_z = detection_result
 
-                # Add can diameter offset to z position (0.033m = 33mm can diameter)
-                # This accounts for the distance from the can center to its front edge
-                current_z_adjusted = current_z + 0.033
+                # Configurable z offset correction (e.g., can center to can front edge)
+                current_z_adjusted = current_z + self.z_offset_correction
 
                 # Calculate errors using adjusted z position
                 error_x = current_x - self.target_x
@@ -486,6 +534,18 @@ class LocateObjectActionServer(Node):
             norm_y2 = int(thumb_y2 * scale_y)
             norm_x2 = int(thumb_x2 * scale_x)
 
+            # Clamp bbox to image bounds in case Gemini returns edge/out-of-range values
+            norm_x1 = max(0, min(original_width - 1, norm_x1))
+            norm_x2 = max(0, min(original_width - 1, norm_x2))
+            norm_y1 = max(0, min(original_height - 1, norm_y1))
+            norm_y2 = max(0, min(original_height - 1, norm_y2))
+
+            if norm_x2 <= norm_x1 or norm_y2 <= norm_y1:
+                self.get_logger().error(
+                    f'Bounding box collapsed after clamping: ({norm_x1}, {norm_y1}) -> ({norm_x2}, {norm_y2})'
+                )
+                return None
+
             self.get_logger().info(f'Original bbox: ({norm_x1}, {norm_y1}) -> ({norm_x2}, {norm_y2})')
             self.get_logger().info(f'Scale factors: x={scale_x:.3f}, y={scale_y:.3f}')
 
@@ -594,65 +654,40 @@ class LocateObjectActionServer(Node):
                 y_3d = self.fixed_y_value
                 self.get_logger().info(f'Y-value override: {y_3d_original:.3f}m -> {y_3d:.3f}m (fixed)')
 
-            # === VISUALIZATION DEBUG ===
-            # Visualization disabled for production use
-            # Uncomment the code below to enable debug visualization windows
-
-            # # Display 3 debug images in separate windows
-            # # Window 1: Gemini input image (thumbnailed)
-            # gemini_display_img = np.array(img)
-            # gemini_bgr = cv2.cvtColor(gemini_display_img, cv2.COLOR_RGB2BGR)
-            #
-            # # Window 2: Original RGB image with bounding box
-            # rgb_with_bbox = cv_rgb_image.copy()
-            # cv2.rectangle(rgb_with_bbox, (norm_x1, norm_y1), (norm_x2, norm_y2), (0, 255, 0), 3)
-            # cv2.circle(rgb_with_bbox, (center_x, center_y), 8, (255, 0, 0), -1)
-            # # Add text with position info
-            # text = f"RGB Center: ({center_x}, {center_y})"
-            # cv2.putText(rgb_with_bbox, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            # text2 = f"Shift: {horizontal_shift}px ({self.bbox_shift_ratio} * height={bbox_height})"
-            # cv2.putText(rgb_with_bbox, text2, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            # text3 = f"BBox: ({norm_x1},{norm_y1}) -> ({norm_x2},{norm_y2})"
-            # cv2.putText(rgb_with_bbox, text3, (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            #
-            # # Window 3: Depth image with BOTH bounding boxes (SCALED to depth image resolution)
-            # # Normalize depth image for visualization
-            # depth_normalized = cv2.normalize(cv_depth_image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-            # depth_colored = cv2.applyColorMap(depth_normalized, cv2.COLORMAP_JET)
-            #
-            # # Draw original RGB bbox position in RED (for reference) - SCALED to depth image
-            # cv2.rectangle(depth_colored, (norm_x1_scaled, norm_y1_scaled), (norm_x2_scaled, norm_y2_scaled), (0, 0, 255), 2)
-            # cv2.circle(depth_colored, (center_x_scaled, center_y_scaled), 4, (0, 0, 255), -1)
-            #
-            # # Draw shifted depth bbox in GREEN (actual sampling position) - SCALED to depth image
-            # cv2.rectangle(depth_colored, (depth_x1_scaled, depth_y1_scaled), (depth_x2_scaled, depth_y2_scaled), (0, 255, 0), 3)
-            # cv2.circle(depth_colored, (depth_center_x_scaled, depth_center_y_scaled), 5, (255, 255, 255), -1)
-            #
-            # # Add text
-            # text_depth = f"Depth Center: ({depth_center_x_scaled}, {depth_center_y_scaled}) = {depth:.3f}m"
-            # cv2.putText(depth_colored, text_depth, (10, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
-            # text_scale = f"Scale: {depth_scale_x:.3f}x, {depth_scale_y:.3f}y"
-            # cv2.putText(depth_colored, text_scale, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
-            # text_3d = f"3D: x={x_3d:.3f}m, z={z_3d:.3f}m"
-            # cv2.putText(depth_colored, text_3d, (10, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
-            # text_legend = "RED=RGB position, GREEN=Shifted depth sampling"
-            # cv2.putText(depth_colored, text_legend, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1)
-            #
-            # # Create named windows and display
-            # cv2.namedWindow('1. Gemini Input', cv2.WINDOW_NORMAL)
-            # cv2.namedWindow('2. RGB with BBox', cv2.WINDOW_NORMAL)
-            # cv2.namedWindow('3. Depth with BBox', cv2.WINDOW_NORMAL)
-            #
-            # cv2.imshow('1. Gemini Input', gemini_bgr)
-            # cv2.imshow('2. RGB with BBox', rgb_with_bbox)
-            # cv2.imshow('3. Depth with BBox', depth_colored)
-            #
-            # self.get_logger().info('=== DEBUG WINDOWS DISPLAYED ===')
-            # self.get_logger().info('Press any key on one of the windows to continue...')
-            # cv2.waitKey(0)  # Wait indefinitely for key press
-            # cv2.destroyAllWindows()
-            # cv2.waitKey(1)  # Small delay to ensure windows close properly
-            # === END VISUALIZATION ===
+            self._publish_debug_frames(
+                drink_name=drink_name,
+                cv_rgb_image=cv_rgb_image,
+                cv_depth_image=cv_depth_image,
+                norm_x1=norm_x1,
+                norm_y1=norm_y1,
+                norm_x2=norm_x2,
+                norm_y2=norm_y2,
+                center_x=center_x,
+                center_y=center_y,
+                horizontal_shift=horizontal_shift,
+                norm_x1_scaled=norm_x1_scaled,
+                norm_y1_scaled=norm_y1_scaled,
+                norm_x2_scaled=norm_x2_scaled,
+                norm_y2_scaled=norm_y2_scaled,
+                center_x_scaled=center_x_scaled,
+                center_y_scaled=center_y_scaled,
+                depth_x1_scaled=depth_x1_scaled,
+                depth_y1_scaled=depth_y1_scaled,
+                depth_x2_scaled=depth_x2_scaled,
+                depth_y2_scaled=depth_y2_scaled,
+                depth_center_x_scaled=depth_center_x_scaled,
+                depth_center_y_scaled=depth_center_y_scaled,
+                sample_x_min=x_min,
+                sample_x_max=x_max,
+                sample_y_min=y_min,
+                sample_y_max=y_max,
+                depth=depth,
+                depth_std=depth_std,
+                depth_samples=len(valid_depths),
+                x_3d=x_3d,
+                y_3d=y_3d,
+                z_3d=z_3d
+            )
 
             return (x_3d, y_3d, z_3d)
 
@@ -661,6 +696,139 @@ class LocateObjectActionServer(Node):
             import traceback
             self.get_logger().error(traceback.format_exc())
             return None
+
+    def _publish_debug_frames(
+        self,
+        drink_name,
+        cv_rgb_image,
+        cv_depth_image,
+        norm_x1,
+        norm_y1,
+        norm_x2,
+        norm_y2,
+        center_x,
+        center_y,
+        horizontal_shift,
+        norm_x1_scaled,
+        norm_y1_scaled,
+        norm_x2_scaled,
+        norm_y2_scaled,
+        center_x_scaled,
+        center_y_scaled,
+        depth_x1_scaled,
+        depth_y1_scaled,
+        depth_x2_scaled,
+        depth_y2_scaled,
+        depth_center_x_scaled,
+        depth_center_y_scaled,
+        sample_x_min,
+        sample_x_max,
+        sample_y_min,
+        sample_y_max,
+        depth,
+        depth_std,
+        depth_samples,
+        x_3d,
+        y_3d,
+        z_3d
+    ):
+        """
+        Publish annotated RGB/depth debug frames to ROS topics.
+
+        These frames visualize where Gemini detected the object and where
+        the depth sampling window was read from.
+        """
+        if not self.enable_debug_frames:
+            return
+        if self.debug_rgb_publisher is None or self.debug_depth_publisher is None:
+            return
+
+        try:
+            # RGB debug frame: detection bbox + center point
+            rgb_debug = cv_rgb_image.copy()
+            cv2.rectangle(rgb_debug, (norm_x1, norm_y1), (norm_x2, norm_y2), (0, 255, 0), 3)
+            cv2.circle(rgb_debug, (center_x, center_y), 6, (0, 0, 255), -1)
+            cv2.putText(
+                rgb_debug,
+                f'{drink_name} bbox, shift={horizontal_shift}px',
+                (10, 25),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.45,
+                (0, 255, 0),
+                1
+            )
+
+            # Depth debug frame: RGB bbox reference (red) + shifted sampling (green)
+            depth_float = cv_depth_image.astype(np.float32)
+            depth_normalized = np.zeros(depth_float.shape, dtype=np.uint8)
+            valid_mask = depth_float > 0
+            if np.any(valid_mask):
+                valid_depth = depth_float[valid_mask]
+                min_depth = np.min(valid_depth)
+                max_depth = np.max(valid_depth)
+                if max_depth > min_depth:
+                    normalized = ((valid_depth - min_depth) / (max_depth - min_depth) * 255.0).astype(np.uint8)
+                    depth_normalized[valid_mask] = normalized
+
+            depth_debug = cv2.applyColorMap(depth_normalized, cv2.COLORMAP_JET)
+
+            # Clamp drawing coordinates to depth frame bounds
+            height, width = depth_debug.shape[:2]
+            norm_x1_scaled = max(0, min(width - 1, norm_x1_scaled))
+            norm_x2_scaled = max(0, min(width - 1, norm_x2_scaled))
+            norm_y1_scaled = max(0, min(height - 1, norm_y1_scaled))
+            norm_y2_scaled = max(0, min(height - 1, norm_y2_scaled))
+            depth_x1_scaled = max(0, min(width - 1, depth_x1_scaled))
+            depth_x2_scaled = max(0, min(width - 1, depth_x2_scaled))
+            depth_y1_scaled = max(0, min(height - 1, depth_y1_scaled))
+            depth_y2_scaled = max(0, min(height - 1, depth_y2_scaled))
+            center_x_scaled = max(0, min(width - 1, center_x_scaled))
+            center_y_scaled = max(0, min(height - 1, center_y_scaled))
+            depth_center_x_scaled = max(0, min(width - 1, depth_center_x_scaled))
+            depth_center_y_scaled = max(0, min(height - 1, depth_center_y_scaled))
+            sample_x_min = max(0, min(width - 1, sample_x_min))
+            sample_x_max = max(1, min(width, sample_x_max))
+            sample_y_min = max(0, min(height - 1, sample_y_min))
+            sample_y_max = max(1, min(height, sample_y_max))
+
+            cv2.rectangle(depth_debug, (norm_x1_scaled, norm_y1_scaled), (norm_x2_scaled, norm_y2_scaled), (0, 0, 255), 2)
+            cv2.circle(depth_debug, (center_x_scaled, center_y_scaled), 4, (0, 0, 255), -1)
+            cv2.rectangle(depth_debug, (depth_x1_scaled, depth_y1_scaled), (depth_x2_scaled, depth_y2_scaled), (0, 255, 0), 2)
+            cv2.circle(depth_debug, (depth_center_x_scaled, depth_center_y_scaled), 4, (255, 255, 255), -1)
+            cv2.rectangle(depth_debug, (sample_x_min, sample_y_min), (sample_x_max - 1, sample_y_max - 1), (255, 255, 0), 1)
+
+            cv2.putText(
+                depth_debug,
+                f'depth={depth:.3f}m std={depth_std:.3f}m n={depth_samples}',
+                (10, 20),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.4,
+                (255, 255, 255),
+                1
+            )
+            cv2.putText(
+                depth_debug,
+                f'3D x={x_3d:.3f} y={y_3d:.3f} z={z_3d:.3f}',
+                (10, 40),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.4,
+                (255, 255, 255),
+                1
+            )
+            cv2.putText(
+                depth_debug,
+                'red=RGB bbox green=shifted bbox cyan=sample window',
+                (10, 60),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.32,
+                (255, 255, 255),
+                1
+            )
+
+            self.debug_rgb_publisher.publish(self.bridge.cv2_to_imgmsg(rgb_debug, encoding='bgr8'))
+            self.debug_depth_publisher.publish(self.bridge.cv2_to_imgmsg(depth_debug, encoding='bgr8'))
+        except Exception as e:
+            self.get_logger().warn(f'Failed to publish debug frames: {str(e)}')
 
     def _extract_json(self, text):
         """
@@ -741,12 +909,30 @@ class LocateObjectActionServer(Node):
             error_x: Horizontal error in meters (positive = drink is to the right)
             error_z: Distance error in meters (positive = drink is too far)
         """
-        # Proportional control
+        # PI control
+        # Approximate control dt from configured loop rate
+        dt = 1.0 / max(self.control_loop_rate, 1e-3)
+
+        self.linear_error_integral += error_z * dt
+        self.angular_error_integral += error_x * dt
+
+        # Anti-windup clamp on integrator states
+        self.linear_error_integral = max(
+            -self.linear_integral_limit,
+            min(self.linear_integral_limit, self.linear_error_integral)
+        )
+        self.angular_error_integral = max(
+            -self.angular_integral_limit,
+            min(self.angular_integral_limit, self.angular_error_integral)
+        )
+
         # Linear velocity: move forward/backward to achieve target distance
-        linear_vel = self.k_linear * error_z
+        linear_vel = (self.k_linear * error_z) + (self.k_linear_i * self.linear_error_integral)
 
         # Angular velocity: rotate to center the drink (negative because positive error means turn left)
-        angular_vel = -self.k_angular * error_x
+        angular_vel = -(
+            (self.k_angular * error_x) + (self.k_angular_i * self.angular_error_integral)
+        )
 
         # Apply velocity limits
         linear_vel = max(-self.max_linear_vel, min(self.max_linear_vel, linear_vel))
@@ -765,7 +951,10 @@ class LocateObjectActionServer(Node):
 
         self.cmd_vel_publisher.publish(cmd_vel)
 
-        self.get_logger().debug(f'Velocity command: linear={linear_vel:.3f}, angular={angular_vel:.3f}')
+        self.get_logger().debug(
+            f'Velocity command: linear={linear_vel:.3f}, angular={angular_vel:.3f}, '
+            f'i_linear={self.linear_error_integral:.3f}, i_angular={self.angular_error_integral:.3f}'
+        )
 
     def _stop_robot(self):
         """Send zero velocity command to stop the robot."""

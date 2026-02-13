@@ -6,12 +6,17 @@ locate_object_action_server:
     x_tolerance: 0.015    # Horizontal tolerance (meters) - success when |error_x| < x_tolerance
     z_tolerance: 0.02    # Distance tolerance (meters) - success when |error_z| < z_tolerance
 
-    # Control parameters (proportional control gains)
-    k_linear: 4.0     # Linear velocity gain (higher = faster forward/backward movement)
-    k_angular: 10.0   # Angular velocity gain (higher = faster rotation)
-    max_linear_vel: 0.5  # Maximum linear velocity (m/s)
-    max_angular_vel: 0.5 # Maximum angular velocity (rad/s)
-    min_movement_threshold: 0.001  # Minimum velocity to prevent oscillations
+    # Control parameters (PI control gains)
+    k_linear: 3.0       # Lowered for smoother forward/back movement on real robot
+    k_linear_i: 1.0     # Integral term helps remove small steady-state distance error
+    k_angular: 5.0       # Lowered for smoother heading corrections
+    k_angular_i: 1.25    # Integral term helps remove persistent centering bias
+    linear_integral_limit: 0.2   # Anti-windup clamp for linear integral state
+    angular_integral_limit: 0.2  # Anti-windup clamp for angular integral state
+    max_linear_vel: 0.2   # Reduced cap for less aggressive movement (m/s)
+    max_angular_vel: 0.3  # Reduced cap for less aggressive turning (rad/s)
+    min_movement_threshold: 0.05  # Minimum velocity to prevent oscillations
+    z_offset_correction: 0.033  # Distance correction added to raw z before control
 
     # Camera parameters - REAL ROBOT (Arducam ToF)
     # NOTE: These are estimated defaults - tune after testing on real hardware
@@ -26,6 +31,11 @@ locate_object_action_server:
     # Y-value override (for debugging/testing)
     override_y_value: true   # Enable to force Y value to fixed_y_value (disables calculated Y from depth camera)
     fixed_y_value: 0.08       # Fixed Y value (meters) when override_y_value is true
+
+    # Debug visualization (annotated frames)
+    enable_debug_frames: true
+    debug_rgb_topic: '/locate_object/debug/rgb'
+    debug_depth_topic: '/locate_object/debug/depth'
 
     # Operation parameters
     max_detection_attempts: 5   # Maximum number of detection attempts before failure

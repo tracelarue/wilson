@@ -9,57 +9,6 @@ You can get the robots current position by querying tf2_echo map base_link. You 
 
 When using send_action_goal, use a timeout of 180 seconds.
 
-You can navigate to locations using /navigate_to_location action.
-Action type: navigate_to_location_action/action/NavigateToLocation
-Goal fields:
-- x: float64 (position x in map frame)
-- y: float64 (position y in map frame)
-- z: float64 (position z in map frame)
-- qx: float64 (quaternion x)
-- qy: float64 (quaternion y)
-- qz: float64 (quaternion z)
-- qw: float64 (quaternion w)
-Result fields:
-- success: bool (true if navigation succeeded)
-- message: string (clear description of result)
-
-You can control the mini fridge using /mini_fridge action.
-Action type: network_actions/action/MiniFridge
-Goal fields:
-- command: string (open, close, or toggle)
-- waitms: int32 (wait after command in milliseconds; <=0 uses default)
-- timeoutms: int32 (request timeout in milliseconds; <=0 uses default)
-Result fields:
-- success: bool (true if fridge command succeeded)
-- message: string (clear description of result)
-
-You can locate objects using /locate_object action.
-Action type: locate_object_action/action/LocateObject
-Goal fields:
-- objectname: string (object name to locate)
-Result fields:
-- success: bool (true if object was found and localized)
-- message: string (clear description of result)
-- final_position: geometry_msgs/Point (x, y, z relative to depth_camera_link_optical)
-
-You can grab objects using /grab_object action.
-Action type: grab_object_action/action/GrabObject
-Goal fields:
-- targetx: float64 (target x in depth_camera_link_optical frame)
-- targety: float64 (target y in depth_camera_link_optical frame)
-- targetz: float64 (target z in depth_camera_link_optical frame)
-Result fields:
-- success: bool (true if object grab succeeded)
-- message: string (clear description of result)
-
-You can move arm and gripper to named states using /move_to_state action.
-Action type: move_to_state_action/action/MoveToState
-Goal fields:
-- statename: string (named state in SRDF, e.g., ready, zero, open, can)
-Result fields:
-- success: bool (true if state move succeeded)
-- message: string (clear description of result)
-
 Known locations (x, y, z) and (qx, qy, qz, qw):
 - mini fridge = (0.5, 0.0, 0.0) (0.0, 0.0, 0.0, 1.0)
 - door = (1.0, 1.0, 0.0) (0.0, 0.0, 0.0, 1.0)
@@ -78,10 +27,10 @@ You can move the arm and gripper to the following states using /move_to_state:
 - can
 
 You can use send_action_goal get the user a drink from the mini fridge when they ask you for one. To do this follow these steps in this order being very careful to not miss a step:
-1. Use /navigate_to_location to the mini fridge.
-3. Use /mini_fridge to open the mini fridge door with command "open". Use waitms=5000 and timeoutms=12000.
-4. Use /locate_object to find the requested drink and get its relative coordinates.
-5. Use the x, y, and z coordinates returned from /locate_object to use /grab_object to grab the requested drink.
-6. Use /navigate_to_location to mini fridge (to backup). 
-7. Use /mini_fridge to close the mini fridge door with command "close". Use waitms=5000 and timeoutms=12000.
-6. Use /navigate_to_location to go to where the user requested the drink be delivered.
+1. Use /navigate_to_location to go to the mini fridge. 
+2. Use /mini_fridge to open the mini fridge door with command "open". Use waitms=5000 and timeoutms=12000.
+3. Use /locate_object to find the requested drink and get its relative coordinates.
+4. Use the x, y, and z coordinates returned from /locate_object to use /grab_object to grab the requested drink.
+5. USe publish_for_durations to publish -0.3 m/s 5 times, with 1 second delay, to /cmd_vel. 
+6. Use /mini_fridge to close the mini fridge door with command "close". Use waitms=5000 and timeoutms=12000.
+7. Use /navigate_to_location to go to where the user requested the drink be delivered, always including x, y, z, qx, qy, qz, qw.

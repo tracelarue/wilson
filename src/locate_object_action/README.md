@@ -16,6 +16,7 @@ The `locate_object_action` package provides an action server that:
 - **3D Localization**: Combines RGB and depth camera data for accurate positioning
 - **Adaptive Control**: Proportional controller for smooth robot movement
 - **Configurable Parameters**: All control gains, tolerances, and timeouts adjustable via YAML
+- **Visual Debug Frames**: Optional annotated RGB/depth topics to inspect bbox and depth sampling
 - **Comprehensive Feedback**: Real-time status updates during positioning
 - **Error Handling**: Robust error handling for API failures, timeouts, and detection failures
 
@@ -145,10 +146,15 @@ All parameters are configurable via [config/locate_object_params.yaml](config/lo
 
 ### Control Parameters
 - `k_linear` (default: 0.5): Linear velocity proportional gain
+- `k_linear_i` (default: 0.0): Linear velocity integral gain
 - `k_angular` (default: 1.0): Angular velocity proportional gain
+- `k_angular_i` (default: 0.0): Angular velocity integral gain
+- `linear_integral_limit` (default: 0.2): Anti-windup clamp for linear integral state
+- `angular_integral_limit` (default: 0.2): Anti-windup clamp for angular integral state
 - `max_linear_vel` (default: 0.3): Maximum linear velocity in m/s
 - `max_angular_vel` (default: 0.5): Maximum angular velocity in rad/s
 - `min_movement_threshold` (default: 0.005): Minimum velocity to prevent oscillations
+- `z_offset_correction` (default: 0.033): Distance correction added to raw detected z before control
 
 ### Camera Parameters
 - `h_fov` (default: 1.089): Horizontal field of view in radians
@@ -216,6 +222,11 @@ The Y-coordinate can be manually overridden for debugging/calibration purposes. 
 
 To disable the override and use the actual calculated Y-coordinate, set `override_y_value: false` in your config file.
 
+### Visual Debug Parameters
+- `enable_debug_frames` (default: false): Publish annotated debug images for detection and depth sampling
+- `debug_rgb_topic` (default: `/locate_object/debug/rgb`): RGB frame with detected bbox and center
+- `debug_depth_topic` (default: `/locate_object/debug/depth`): Colorized depth frame with shifted depth sample window
+
 ## Topics
 
 ### Subscribed Topics
@@ -224,6 +235,8 @@ To disable the override and use the actual calculated Y-coordinate, set `overrid
 
 ### Published Topics
 - `/cmd_vel` (geometry_msgs/Twist): Velocity commands for differential drive base
+- `/locate_object/debug/rgb` (sensor_msgs/Image): Annotated RGB detection frame (when `enable_debug_frames=true`)
+- `/locate_object/debug/depth` (sensor_msgs/Image): Annotated depth sampling frame (when `enable_debug_frames=true`)
 
 ### Action Servers
 - `/locate_object` (locate_object_action/action/LocateObject): Main action interface
