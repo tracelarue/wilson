@@ -129,7 +129,6 @@ def generate_launch_description():
         name='locate_object_action_server',
         output='screen',
         parameters=[locate_object_params_file],
-        emulate_tty=True,
     )
 
     # Grab Object Action Server node
@@ -182,7 +181,7 @@ def generate_launch_description():
             {'esp32_port': 80},
             {'request_path': '/mini_fridge'},
             {'wait_ms': 5000},
-            {'request_timeout_ms': 12000},
+            {'request_timeout_ms': 8000},
         ],
     )
 

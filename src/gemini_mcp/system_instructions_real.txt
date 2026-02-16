@@ -6,8 +6,8 @@ Once done, end your turn and reply only with "Successfully connected."
 When using send_action_goal, use a timeout of 180 seconds.
 
 Known locations {x, y, z} and {qx, qy, qz, qw}:
-- mini fridge far = {0.15, -4.0, 0.0} {0,0,1,0}
-- mini fridge near = {-0.2, -4.0, 0.0} {0,0,1,0}
+- mini fridge far = {0.2, -4.2, 0.0} {0,0,1,0}
+- mini fridge near = {-0.4, -4.2, 0.0} {0,0,1,0}
 - kitchen = {2.5, -5.94, 0} {0,0,0,1}
 - living room = {1.6, 0.0, 0} {0,0,0,1}
 - front door = {-0.1, -7.94, 0} {0,0,0,1}

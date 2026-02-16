@@ -167,16 +167,13 @@ class LocateObjectActionServer(Node):
         self.declare_parameter('x_tolerance', 0.05)  # Horizontal tolerance
         self.declare_parameter('z_tolerance', 0.05)  # Distance tolerance
 
-        # Control parameters
+        # Control parameters (P control)
         self.declare_parameter('k_linear', 0.3)
-        self.declare_parameter('k_linear_i', 0.0)
         self.declare_parameter('k_angular', 1.0)
-        self.declare_parameter('k_angular_i', 0.0)
-        self.declare_parameter('linear_integral_limit', 0.2)
-        self.declare_parameter('angular_integral_limit', 0.2)
         self.declare_parameter('max_linear_vel', 0.3)
         self.declare_parameter('max_angular_vel', 0.5)
-        self.declare_parameter('min_movement_threshold', 0.005)
+        self.declare_parameter('min_linear_vel', 0.005)
+        self.declare_parameter('min_angular_vel', 0.005)
         self.declare_parameter('z_offset_correction', 0.033)  # Compensates from can center to front edge
 
         # Camera parameters
@@ -214,14 +211,11 @@ class LocateObjectActionServer(Node):
 
         # Control gains
         self.k_linear = self.get_parameter('k_linear').value
-        self.k_linear_i = self.get_parameter('k_linear_i').value
         self.k_angular = self.get_parameter('k_angular').value
-        self.k_angular_i = self.get_parameter('k_angular_i').value
-        self.linear_integral_limit = self.get_parameter('linear_integral_limit').value
-        self.angular_integral_limit = self.get_parameter('angular_integral_limit').value
         self.max_linear_vel = self.get_parameter('max_linear_vel').value
         self.max_angular_vel = self.get_parameter('max_angular_vel').value
-        self.min_movement_threshold = self.get_parameter('min_movement_threshold').value
+        self.min_linear_vel = self.get_parameter('min_linear_vel').value
+        self.min_angular_vel = self.get_parameter('min_angular_vel').value
         self.z_offset_correction = self.get_parameter('z_offset_correction').value
 
         # Camera parameters
@@ -250,14 +244,9 @@ class LocateObjectActionServer(Node):
         self.api_timeout = self.get_parameter('api_timeout').value
         self.movement_settle_time = self.get_parameter('movement_settle_time').value
 
-        # Internal PI controller state
-        self.linear_error_integral = 0.0
-        self.angular_error_integral = 0.0
-
     def _reset_controller_state(self):
-        """Reset PI controller integrator state between goals/failures."""
-        self.linear_error_integral = 0.0
-        self.angular_error_integral = 0.0
+        """Reset controller state between goals/failures (no-op for P control)."""
+        return
 
     def rgb_image_callback(self, msg):
         """Callback for RGB camera images."""
@@ -909,39 +898,26 @@ class LocateObjectActionServer(Node):
             error_x: Horizontal error in meters (positive = drink is to the right)
             error_z: Distance error in meters (positive = drink is too far)
         """
-        # PI control
-        # Approximate control dt from configured loop rate
-        dt = 1.0 / max(self.control_loop_rate, 1e-3)
-
-        self.linear_error_integral += error_z * dt
-        self.angular_error_integral += error_x * dt
-
-        # Anti-windup clamp on integrator states
-        self.linear_error_integral = max(
-            -self.linear_integral_limit,
-            min(self.linear_integral_limit, self.linear_error_integral)
-        )
-        self.angular_error_integral = max(
-            -self.angular_integral_limit,
-            min(self.angular_integral_limit, self.angular_error_integral)
-        )
-
         # Linear velocity: move forward/backward to achieve target distance
-        linear_vel = (self.k_linear * error_z) + (self.k_linear_i * self.linear_error_integral)
+        linear_vel = self.k_linear * error_z
 
         # Angular velocity: rotate to center the drink (negative because positive error means turn left)
-        angular_vel = -(
-            (self.k_angular * error_x) + (self.k_angular_i * self.angular_error_integral)
-        )
+        angular_vel = -(self.k_angular * error_x)
 
         # Apply velocity limits
         linear_vel = max(-self.max_linear_vel, min(self.max_linear_vel, linear_vel))
         angular_vel = max(-self.max_angular_vel, min(self.max_angular_vel, angular_vel))
 
-        # Apply minimum movement threshold to prevent tiny oscillations
-        if abs(linear_vel) < self.min_movement_threshold:
+        # Apply minimum velocity floors to overcome stiction when a non-zero command is needed.
+        if 0.0 < abs(linear_vel) < self.min_linear_vel:
+            linear_vel = self.min_linear_vel if linear_vel > 0.0 else -self.min_linear_vel
+        if 0.0 < abs(angular_vel) < self.min_angular_vel:
+            angular_vel = self.min_angular_vel if angular_vel > 0.0 else -self.min_angular_vel
+
+        # If below configured minimums after floors (including exact zero), stop.
+        if abs(linear_vel) < self.min_linear_vel:
             linear_vel = 0.0
-        if abs(angular_vel) < self.min_movement_threshold:
+        if abs(angular_vel) < self.min_angular_vel:
             angular_vel = 0.0
 
         # Create and publish Twist message
@@ -952,8 +928,7 @@ class LocateObjectActionServer(Node):
         self.cmd_vel_publisher.publish(cmd_vel)
 
         self.get_logger().debug(
-            f'Velocity command: linear={linear_vel:.3f}, angular={angular_vel:.3f}, '
-            f'i_linear={self.linear_error_integral:.3f}, i_angular={self.angular_error_integral:.3f}'
+            f'Velocity command: linear={linear_vel:.3f}, angular={angular_vel:.3f}'
         )
 
     def _stop_robot(self):

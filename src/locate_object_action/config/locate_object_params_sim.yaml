@@ -6,16 +6,13 @@ locate_object_action_server:
     x_tolerance: 0.01   # Horizontal tolerance (meters) - success when |error_x| < x_tolerance
     z_tolerance: 0.02   # Distance tolerance (meters) - success when |error_z| < z_tolerance
 
-    # Control parameters (PI control gains)
+    # Control parameters (P control gains)
     k_linear: 1.2     # Linear velocity gain (higher = faster forward/backward movement)
-    k_linear_i: 0.0   # Integral disabled by default in sim
     k_angular: 2.0     # Angular velocity gain (higher = faster rotation)
-    k_angular_i: 0.0   # Integral disabled by default in sim
-    linear_integral_limit: 0.2   # Anti-windup clamp for linear integral state
-    angular_integral_limit: 0.2  # Anti-windup clamp for angular integral state
     max_linear_vel: 0.5  # Maximum linear velocity (m/s)
     max_angular_vel: 0.5 # Maximum angular velocity (rad/s)
-    min_movement_threshold: 0.001  # Minimum velocity to prevent oscillations
+    min_linear_vel: 0.001   # Minimum non-zero linear velocity to overcome stiction
+    min_angular_vel: 0.001  # Minimum non-zero angular velocity to overcome stiction
     z_offset_correction: 0.033  # Distance correction added to raw z before control
 
     # Camera parameters - SIMULATION (Gazebo)

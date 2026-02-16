@@ -6,16 +6,13 @@ locate_object_action_server:
     x_tolerance: 0.015    # Horizontal tolerance (meters) - success when |error_x| < x_tolerance
     z_tolerance: 0.02    # Distance tolerance (meters) - success when |error_z| < z_tolerance
 
-    # Control parameters (PI control gains)
-    k_linear: 3.0       # Lowered for smoother forward/back movement on real robot
-    k_linear_i: 1.0     # Integral term helps remove small steady-state distance error
+    # Control parameters (P control gains)
+    k_linear: 2.5       # Lowered for smoother forward/back movement on real robot
     k_angular: 5.0       # Lowered for smoother heading corrections
-    k_angular_i: 1.25    # Integral term helps remove persistent centering bias
-    linear_integral_limit: 0.2   # Anti-windup clamp for linear integral state
-    angular_integral_limit: 0.2  # Anti-windup clamp for angular integral state
     max_linear_vel: 0.2   # Reduced cap for less aggressive movement (m/s)
     max_angular_vel: 0.3  # Reduced cap for less aggressive turning (rad/s)
-    min_movement_threshold: 0.05  # Minimum velocity to prevent oscillations
+    min_linear_vel: 0.05   # Minimum non-zero linear velocity to overcome stiction
+    min_angular_vel: 0.20  # Minimum non-zero angular velocity to overcome stiction
     z_offset_correction: 0.033  # Distance correction added to raw z before control
 
     # Camera parameters - REAL ROBOT (Arducam ToF)
@@ -42,4 +39,4 @@ locate_object_action_server:
     control_loop_rate: 2.0      # Control loop frequency (Hz) - balance responsiveness vs API costs
     overall_timeout: 60.0       # Overall operation timeout (seconds)
     api_timeout: 10.0           # Gemini API timeout (seconds)
-    movement_settle_time: 0.5   # Time to wait after sending velocity command (seconds)
+    movement_settle_time: 0.3   # Time to wait after sending velocity command (seconds)
