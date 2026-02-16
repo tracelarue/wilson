@@ -29,7 +29,7 @@ def generate_launch_description():
     
     declare_map_yaml = DeclareLaunchArgument(
         'map',
-        default_value=os.path.join(get_package_share_directory(package_name), 'maps', 'downstairs_save.yaml'),
+        default_value=os.path.join(get_package_share_directory(package_name), 'maps', 'downstairs_save_edit.yaml'),
         description='Full path to map yaml file'
     )
     
