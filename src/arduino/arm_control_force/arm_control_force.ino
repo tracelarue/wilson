@@ -174,7 +174,8 @@ void loop() {
     // Print exactly 6 values for hardware interface parser:
     // primary_x,primary_y,primary_z,ambient_x,ambient_y,ambient_z
     // Guard against Serial TX blocking which can introduce jitter.
-    if (Serial.availableForWrite() >= 64) {
+    // Nano TX buffer is typically 64 bytes; requiring 64 can starve output.
+    if (Serial.availableForWrite() >= 48) {
       Serial.print(data.x);
       Serial.print(",");
       Serial.print(data.y);
