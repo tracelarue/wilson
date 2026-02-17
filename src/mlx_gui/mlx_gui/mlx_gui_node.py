@@ -257,7 +257,7 @@ class MLXLiveGUI:
         bottom.grid(row=2, column=0, sticky="ew")
 
         bottom.columnconfigure(0, weight=1)
-        for c in range(1, 9):
+        for c in range(1, 7):
             bottom.columnconfigure(c, weight=0)
 
         # Sample rate display
@@ -265,28 +265,16 @@ class MLXLiveGUI:
         status_lbl = ttk.Label(bottom, textvariable=self.sample_rate_var, style="Status.TLabel")
         status_lbl.grid(row=0, column=0, sticky="w")
 
-        # Tare buttons
-        self.tare_btn = ttk.Button(bottom, text="Tare Dual", command=self.tare_stream,
+        # Tare button
+        self.tare_btn = ttk.Button(bottom, text="Tare", command=self.tare_stream,
                                    style="Secondary.TButton")
         self.tare_btn.grid(row=0, column=1, sticky="e", padx=(5, 5))
-
-        self.tare_force_btn = ttk.Button(
-            bottom, text="Tare Force", command=self.tare_force_stream,
-            style="Secondary.TButton"
-        )
-        self.tare_force_btn.grid(row=0, column=2, sticky="e", padx=(5, 5))
-
-        self.tare_ambient_btn = ttk.Button(
-            bottom, text="Tare Ambient", command=self.tare_ambient_stream,
-            style="Secondary.TButton"
-        )
-        self.tare_ambient_btn.grid(row=0, column=3, sticky="e", padx=(5, 5))
 
         self.plot_mode_btn = ttk.Button(
             bottom, textvariable=self.top_plot_mode_var, command=self._cycle_top_plot_mode,
             style="Secondary.TButton"
         )
-        self.plot_mode_btn.grid(row=0, column=4, sticky="e", padx=(5, 5))
+        self.plot_mode_btn.grid(row=0, column=2, sticky="e", padx=(5, 5))
 
         # Capture controls (row 1)
         capture_lbl = ttk.Label(bottom, text="Capture:", style="Inline.TLabel")
@@ -435,32 +423,6 @@ class MLXLiveGUI:
                 f"ambient=({self.tare_ax:.2f}, {self.tare_ay:.2f}, {self.tare_az:.2f})"
             )
             self.status_var.set("Status: Tared (Dual)")
-            self.root.after(1000, self._update_stream_status)
-
-    def tare_force_stream(self):
-        """Set tare offsets for force sensor only."""
-        if self.Xf_raw and self.Yf_raw and self.Zf_raw:
-            self.tare_fx = self.Xf_raw[-1]
-            self.tare_fy = self.Yf_raw[-1]
-            self.tare_fz = self.Zf_raw[-1]
-            self.ros_node.get_logger().info(
-                "Force tare set: "
-                f"({self.tare_fx:.2f}, {self.tare_fy:.2f}, {self.tare_fz:.2f})"
-            )
-            self.status_var.set("Status: Tared (Force)")
-            self.root.after(1000, self._update_stream_status)
-
-    def tare_ambient_stream(self):
-        """Set tare offsets for ambient sensor only."""
-        if self.Xa_raw and self.Ya_raw and self.Za_raw:
-            self.tare_ax = self.Xa_raw[-1]
-            self.tare_ay = self.Ya_raw[-1]
-            self.tare_az = self.Za_raw[-1]
-            self.ros_node.get_logger().info(
-                "Ambient tare set: "
-                f"({self.tare_ax:.2f}, {self.tare_ay:.2f}, {self.tare_az:.2f})"
-            )
-            self.status_var.set("Status: Tared (Ambient)")
             self.root.after(1000, self._update_stream_status)
 
     def start_capture(self):
@@ -670,16 +632,16 @@ class MLXLiveGUI:
         t_rel = [t - t0 for t in self.times]
 
         if self.top_plot_mode == "force_raw":
-            X_disp = self.Xf_raw
-            Y_disp = self.Yf_raw
-            Z_disp = self.Zf_raw
-            self.ax_raw.set_title("Force Sensor Raw Magnetic Field (last {:.1f} s)".format(self.history_seconds))
+            X_disp = self.Xf_tared
+            Y_disp = self.Yf_tared
+            Z_disp = self.Zf_tared
+            self.ax_raw.set_title("Force Sensor Tared Magnetic Field (last {:.1f} s)".format(self.history_seconds))
             overlay_label = "Force"
         elif self.top_plot_mode == "ambient_raw":
-            X_disp = self.Xa_raw
-            Y_disp = self.Ya_raw
-            Z_disp = self.Za_raw
-            self.ax_raw.set_title("Ambient Sensor Raw Magnetic Field (last {:.1f} s)".format(self.history_seconds))
+            X_disp = self.Xa_tared
+            Y_disp = self.Ya_tared
+            Z_disp = self.Za_tared
+            self.ax_raw.set_title("Ambient Sensor Tared Magnetic Field (last {:.1f} s)".format(self.history_seconds))
             overlay_label = "Ambient"
         else:
             # Use SMA for compensated display if available
