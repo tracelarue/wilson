@@ -47,6 +47,7 @@ private:
   // ROS2 publishing for MLX sensor
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<sensor_msgs::msg::MagneticField>::SharedPtr mlx_publisher_;
+  rclcpp::Publisher<sensor_msgs::msg::MagneticField>::SharedPtr mlx_ambient_publisher_;
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
   std::thread executor_thread_;
   bool executor_running_ = false;
@@ -55,6 +56,9 @@ private:
   double mlx_x_;
   double mlx_y_;
   double mlx_z_;
+  double mlx_ambient_x_;
+  double mlx_ambient_y_;
+  double mlx_ambient_z_;
 
   // Helper method
   bool parseMLXData(const std::string& line);

@@ -27,8 +27,11 @@ unsigned long lastLedUpdate = 0;
 
 // MLX90393 sensor variables
 MLX90393 mlx;
+MLX90393 mlx_ambient;
 MLX90393::txyz data;
+MLX90393::txyz data_ambient;
 MLX90393::txyzRaw raw_data;
+MLX90393::txyzRaw raw_data_ambient;
 
 // MLX sensor configuration
 // NOTE: Higher OSR/DIG_FILT increases conversion time significantly.
@@ -39,6 +42,12 @@ int RES_Z = 0;
 int OSR = 1;       // fastest
 int DIG_FILT = 7;  // fastest
 int taredZ = 0;
+int taredZAmbient = 0;
+
+// Ambient MLX sensor uses a custom I2C address configured on-device.
+// Update this value if the ambient sensor is programmed to a different address.
+#define MLX_AMBIENT_ADDR 1
+bool ambient_mlx_ready = true;
 
 // MLX sensor timing
 unsigned long lastMLXUpdate = 0;
@@ -62,6 +71,14 @@ void setup() {
   mlx.setResolution(RES_X, RES_Y, RES_Z);
   mlx.setOverSampling(OSR);
   mlx.setDigitalFiltering(DIG_FILT);
+
+  // Initialize ambient MLX sensor at custom I2C address.
+  mlx_ambient.begin(0, MLX_AMBIENT_ADDR, -1, Wire);
+  mlx_ambient.setGainSel(GAIN);
+  mlx_ambient.setResolution(RES_X, RES_Y, RES_Z);
+  mlx_ambient.setOverSampling(OSR);
+  mlx_ambient.setDigitalFiltering(DIG_FILT);
+
   mlx_conv_ms = mlx.convDelayMillis();
 
   // Setup LED pin
@@ -130,24 +147,12 @@ void loop() {
     lastMLXUpdate = currentMillis;
     if (!mlx_inflight) {
       mlx.startMeasurement(mlx_flags);
+      if (ambient_mlx_ready) {
+        mlx_ambient.startMeasurement(mlx_flags);
+      }
       mlx_start_ms = currentMillis;
       mlx_inflight = true;
     }
-  }
-
-  if (mlx_inflight && (currentMillis - mlx_start_ms >= mlx_conv_ms)) {
-    mlx.readMeasurement(mlx_flags, raw_data);
-    data = mlx.convertRaw(raw_data);
-    taredZ = data.z + 18630;
-
-    // Print exactly 3 values for hardware interface parser
-    Serial.print(data.x);
-    Serial.print(", ");
-    Serial.print(data.y);
-    Serial.print(", ");
-    Serial.println(taredZ);
-
-    mlx_inflight = false;
   }
 
   // If a measurement completed, only print when there's space to avoid blocking.
@@ -156,14 +161,31 @@ void loop() {
     data = mlx.convertRaw(raw_data);
     taredZ = data.z + 18630;
 
-    // Print exactly 3 values for hardware interface parser
+    if (ambient_mlx_ready) {
+      mlx_ambient.readMeasurement(mlx_flags, raw_data_ambient);
+      data_ambient = mlx_ambient.convertRaw(raw_data_ambient);
+      taredZAmbient = data_ambient.z + 18630;
+    } else {
+      data_ambient.x = 0;
+      data_ambient.y = 0;
+      taredZAmbient = 0;
+    }
+
+    // Print exactly 6 values for hardware interface parser:
+    // primary_x,primary_y,primary_z,ambient_x,ambient_y,ambient_z
     // Guard against Serial TX blocking which can introduce jitter.
-    if (Serial.availableForWrite() >= 32) {
+    if (Serial.availableForWrite() >= 64) {
       Serial.print(data.x);
-      Serial.print(", ");
+      Serial.print(",");
       Serial.print(data.y);
-      Serial.print(", ");
-      Serial.println(taredZ);
+      Serial.print(",");
+      Serial.print(taredZ);
+      Serial.print(",");
+      Serial.print(data_ambient.x);
+      Serial.print(",");
+      Serial.print(data_ambient.y);
+      Serial.print(",");
+      Serial.println(taredZAmbient);
     }
 
     mlx_inflight = false;

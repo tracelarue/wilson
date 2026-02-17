@@ -94,6 +94,9 @@ CallbackReturn ArduinobotInterface::on_init(const hardware_interface::HardwareIn
   mlx_x_ = 0.0;
   mlx_y_ = 0.0;
   mlx_z_ = 0.0;
+  mlx_ambient_x_ = 0.0;
+  mlx_ambient_y_ = 0.0;
+  mlx_ambient_z_ = 0.0;
 
   // Create ROS2 node and publisher for MLX sensor
   try
@@ -101,6 +104,8 @@ CallbackReturn ArduinobotInterface::on_init(const hardware_interface::HardwareIn
     node_ = rclcpp::Node::make_shared("arduinobot_mlx_publisher");
     mlx_publisher_ = node_->create_publisher<sensor_msgs::msg::MagneticField>(
         "/mlx", 10);
+    mlx_ambient_publisher_ = node_->create_publisher<sensor_msgs::msg::MagneticField>(
+        "/mlx_ambient", 10);
 
     // Create executor and start spinning thread
     executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
@@ -115,7 +120,7 @@ CallbackReturn ArduinobotInterface::on_init(const hardware_interface::HardwareIn
     });
 
     RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"),
-                "MLX sensor publisher initialized on topic /mlx");
+                "MLX sensor publishers initialized on topics /mlx and /mlx_ambient");
   }
   catch (const std::exception& e)
   {
@@ -236,19 +241,29 @@ hardware_interface::return_type ArduinobotInterface::read(const rclcpp::Time &ti
       arduino_.ReadLine(line, '\n', 10); // 10ms timeout
 
       // Try to parse as MLX sensor data
-      if (parseMLXData(line) && mlx_publisher_)
+      if (parseMLXData(line))
       {
-        // Publish sensor data
-        auto msg = sensor_msgs::msg::MagneticField();
-        msg.header.stamp = time;
-        msg.header.frame_id = "end_effector_frame"; // Sensor mounted on end effector
+        if (mlx_publisher_)
+        {
+          auto msg = sensor_msgs::msg::MagneticField();
+          msg.header.stamp = time;
+          msg.header.frame_id = "end_effector_frame";
+          msg.magnetic_field.x = mlx_x_;
+          msg.magnetic_field.y = mlx_y_;
+          msg.magnetic_field.z = mlx_z_;
+          mlx_publisher_->publish(msg);
+        }
 
-        // MLX90393 outputs in microTesla (µT)
-        msg.magnetic_field.x = mlx_x_;
-        msg.magnetic_field.y = mlx_y_;
-        msg.magnetic_field.z = mlx_z_;
-
-        mlx_publisher_->publish(msg);
+        if (mlx_ambient_publisher_)
+        {
+          auto ambient_msg = sensor_msgs::msg::MagneticField();
+          ambient_msg.header.stamp = time;
+          ambient_msg.header.frame_id = "end_effector_frame";
+          ambient_msg.magnetic_field.x = mlx_ambient_x_;
+          ambient_msg.magnetic_field.y = mlx_ambient_y_;
+          ambient_msg.magnetic_field.z = mlx_ambient_z_;
+          mlx_ambient_publisher_->publish(ambient_msg);
+        }
       }
     }
     catch (const std::exception& e)
@@ -326,7 +341,7 @@ hardware_interface::return_type ArduinobotInterface::write(const rclcpp::Time &t
 
 bool ArduinobotInterface::parseMLXData(const std::string& line)
 {
-  // MLX sensor data format: "x,y,z\n" (3 comma-separated values)
+  // MLX sensor data format: "x,y,z,ax,ay,az\n" (6 comma-separated values)
   // Position response format: "base,shoulder,elbow,wrist,gripper\n" (5 values)
 
   std::istringstream iss(line);
@@ -346,19 +361,23 @@ bool ArduinobotInterface::parseMLXData(const std::string& line)
     }
   }
 
-  // MLX data has exactly 3 values
-  if (values.size() == 3)
+  // MLX data has exactly 6 values (primary + ambient)
+  if (values.size() == 6)
   {
     mlx_x_ = values[0];
     mlx_y_ = values[1];
     mlx_z_ = values[2];
+    mlx_ambient_x_ = values[3];
+    mlx_ambient_y_ = values[4];
+    mlx_ambient_z_ = values[5];
 
     // DEBUG: Log parsed values
     // static int log_count = 0;
     // if (++log_count % 10 == 0)  // Log every 10 readings to avoid spam
     // {
     //   RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"),
-    //               "MLX parsed: x=%.2f, y=%.2f, z=%.2f", mlx_x_, mlx_y_, mlx_z_);
+    //               "MLX parsed: x=%.2f, y=%.2f, z=%.2f, ax=%.2f, ay=%.2f, az=%.2f",
+    //               mlx_x_, mlx_y_, mlx_z_, mlx_ambient_x_, mlx_ambient_y_, mlx_ambient_z_);
     // }
 
     return true;
