@@ -108,7 +108,7 @@ controller_server:
     controller_frequency: 30.0
     min_x_velocity_threshold: 0.03
     min_y_velocity_threshold: 0.0
-    min_theta_velocity_threshold: 0.16
+    min_theta_velocity_threshold: 0.05
     failure_tolerance: 0.3
     progress_checker_plugin: "progress_checker"
     goal_checker_plugins: ["general_goal_checker"]
@@ -127,12 +127,12 @@ controller_server:
       debug_trajectory_details: False
       min_vel_x: -0.25
       min_vel_y: 0.0
-      max_vel_x: 0.3
+      max_vel_x: 0.25
       max_vel_y: 0.0
       max_vel_theta: 0.6
       min_speed_xy: 0.03
-      max_speed_xy: 0.3
-      min_speed_theta: 0.16
+      max_speed_xy: 0.25
+      min_speed_theta: 0.05
       acc_lim_x: 0.3
       acc_lim_y: 0.0
       acc_lim_theta: 0.2
@@ -151,13 +151,13 @@ controller_server:
       short_circuit_trajectory_evaluation: True
       stateful: True
       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-      BaseObstacle.scale: 1.0
-      PathAlign.scale: 10.0
-      PathAlign.forward_point_distance: 0.1
-      GoalAlign.scale: 10.0
-      GoalAlign.forward_point_distance: 0.1
-      PathDist.scale: 20.0
-      GoalDist.scale: 20.0
+      BaseObstacle.scale: 8.0
+      PathAlign.scale: 8.0
+      PathAlign.forward_point_distance: 0.2
+      GoalAlign.scale: 8.0
+      GoalAlign.forward_point_distance: 0.2
+      PathDist.scale: 14.0
+      GoalDist.scale: 14.0
       RotateToGoal.scale: 35.0
       RotateToGoal.slowing_factor: 5.0
       RotateToGoal.lookahead_time: -1.0
@@ -193,8 +193,8 @@ local_costmap:
           min_obstacle_height: 0.0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.25
+        cost_scaling_factor: 4.0
+        inflation_radius: 0.2
       always_send_full_costmap: True
 
 global_costmap:
@@ -229,8 +229,8 @@ global_costmap:
           obstacle_min_range: 0.15
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.25
+        cost_scaling_factor: 4.0
+        inflation_radius: 0.2
       always_send_full_costmap: True
 
 map_server:
@@ -317,11 +317,11 @@ velocity_smoother:
     smoothing_frequency: 30.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [0.3, 0.0, 0.6]
+    max_velocity: [0.25, 0.0, 0.6]
     min_velocity: [-0.25, 0.0, -1.0]
     max_accel: [0.3, 0.0, 0.2]
     max_decel: [-0.3, 0.0, -0.2]
     odom_topic: "odom"
     odom_duration: 0.1
-    deadband_velocity: [0.03, 0.0, 0.16]
+    deadband_velocity: [0.03, 0.0, 0.05]
     velocity_timeout: 1.0
