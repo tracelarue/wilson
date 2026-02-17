@@ -39,8 +39,8 @@ int GAIN = 0;
 int RES_X = 0;
 int RES_Y = 0;
 int RES_Z = 0;
-int OSR = 1;       // fastest
-int DIG_FILT = 7;  // fastest
+int OSR = 2;       // fastest
+int DIG_FILT = 4;  // fastest
 int taredZ = 0;
 int taredZAmbient = 0;
 
