@@ -61,7 +61,7 @@ class MLXLiveGUI:
             (2.84164e-05) * y * z +
             (0.000266599) * z**2
         ) / 40
-        return grip_force
+        return abs(grip_force)
 
     @staticmethod
     def calculate_downforce(x, y, z):
@@ -78,7 +78,7 @@ class MLXLiveGUI:
         """
         # Simple linear formula for downforce
         downforce = x / 40
-        return downforce
+        return abs(downforce)
 
     # ============================================================================
 
