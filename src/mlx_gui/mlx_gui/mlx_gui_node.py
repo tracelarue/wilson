@@ -98,6 +98,9 @@ class MLXLiveGUI:
         self.X_raw = deque()
         self.Y_raw = deque()
         self.Z_raw = deque()
+        self.X_raw_smooth = deque()
+        self.Y_raw_smooth = deque()
+        self.Z_raw_smooth = deque()
 
         # Raw data buffers (force + ambient)
         self.Xf_raw = deque()
@@ -114,6 +117,12 @@ class MLXLiveGUI:
         self.Xa_tared = deque()
         self.Ya_tared = deque()
         self.Za_tared = deque()
+        self.Xf_tared_smooth = deque()
+        self.Yf_tared_smooth = deque()
+        self.Zf_tared_smooth = deque()
+        self.Xa_tared_smooth = deque()
+        self.Ya_tared_smooth = deque()
+        self.Za_tared_smooth = deque()
 
         # Tare offsets (captured simultaneously for force + ambient)
         self.tare_fx = 0.0
@@ -126,17 +135,23 @@ class MLXLiveGUI:
         self.min_y_raw = -10
         self.max_y_raw = 10
 
-        # Simple Moving Average (SMA) buffers
-        self.sma_window_samples = 5
-        self.X_sma = deque()
-        self.Y_sma = deque()
-        self.Z_sma = deque()
+        # Simple Moving Average (SMA) smoothing applied to plotted lines
+        self.smoothing_window_samples = 40
+        self.tare_window_samples = 20
 
         # Force calculation buffers
         self.grip_force = deque()
         self.downforce = deque()
-        self.grip_force_sma = deque()
-        self.downforce_sma = deque()
+        self.grip_force_smooth = deque()
+        self.downforce_smooth = deque()
+        self.grip_force_noncomp = deque()
+        self.downforce_noncomp = deque()
+        self.grip_force_noncomp_smooth = deque()
+        self.downforce_noncomp_smooth = deque()
+
+        # Rolling SMA state (computed once per incoming sample)
+        self._sma_windows = {}
+        self._sma_sums = {}
 
         self.min_y_force = -1
         self.max_y_force = 1
@@ -146,6 +161,8 @@ class MLXLiveGUI:
         self.capture_buffer = []
         self.top_plot_mode = "compensated"
         self.top_plot_mode_var = tk.StringVar(value="Plot: Comp")
+        self.force_plot_mode = "compensated"
+        self.force_plot_mode_var = tk.StringVar(value="Force: Comp")
 
         # Styling
         self._init_style()
@@ -275,6 +292,12 @@ class MLXLiveGUI:
             style="Secondary.TButton"
         )
         self.plot_mode_btn.grid(row=0, column=2, sticky="e", padx=(5, 5))
+
+        self.force_mode_btn = ttk.Button(
+            bottom, textvariable=self.force_plot_mode_var, command=self._cycle_force_plot_mode,
+            style="Secondary.TButton"
+        )
+        self.force_mode_btn.grid(row=0, column=3, sticky="e", padx=(5, 5))
 
         # Capture controls (row 1)
         capture_lbl = ttk.Label(bottom, text="Capture:", style="Inline.TLabel")
@@ -408,22 +431,40 @@ class MLXLiveGUI:
             self.top_plot_mode = "compensated"
             self.top_plot_mode_var.set("Plot: Comp")
 
+    def _cycle_force_plot_mode(self):
+        if self.force_plot_mode == "compensated":
+            self.force_plot_mode = "non_compensated"
+            self.force_plot_mode_var.set("Force: Raw")
+        else:
+            self.force_plot_mode = "compensated"
+            self.force_plot_mode_var.set("Force: Comp")
+
     def tare_stream(self):
         """Set simultaneous tare offsets for force and ambient sensors."""
         if self.Xf_raw and self.Yf_raw and self.Zf_raw and self.Xa_raw and self.Ya_raw and self.Za_raw:
-            self.tare_fx = self.Xf_raw[-1]
-            self.tare_fy = self.Yf_raw[-1]
-            self.tare_fz = self.Zf_raw[-1]
-            self.tare_ax = self.Xa_raw[-1]
-            self.tare_ay = self.Ya_raw[-1]
-            self.tare_az = self.Za_raw[-1]
+            self.tare_fx = self._trailing_mean(self.Xf_raw, self.tare_window_samples)
+            self.tare_fy = self._trailing_mean(self.Yf_raw, self.tare_window_samples)
+            self.tare_fz = self._trailing_mean(self.Zf_raw, self.tare_window_samples)
+            self.tare_ax = self._trailing_mean(self.Xa_raw, self.tare_window_samples)
+            self.tare_ay = self._trailing_mean(self.Ya_raw, self.tare_window_samples)
+            self.tare_az = self._trailing_mean(self.Za_raw, self.tare_window_samples)
             self.ros_node.get_logger().info(
                 "Dual tare set: "
                 f"force=({self.tare_fx:.2f}, {self.tare_fy:.2f}, {self.tare_fz:.2f}) "
-                f"ambient=({self.tare_ax:.2f}, {self.tare_ay:.2f}, {self.tare_az:.2f})"
+                f"ambient=({self.tare_ax:.2f}, {self.tare_ay:.2f}, {self.tare_az:.2f}) "
+                f"from avg of last {self.tare_window_samples} samples"
             )
             self.status_var.set("Status: Tared (Dual)")
             self.root.after(1000, self._update_stream_status)
+
+    @staticmethod
+    def _trailing_mean(values, window):
+        """Mean of the last `window` values (or all available if shorter)."""
+        data = list(values)
+        if not data:
+            return 0.0
+        use = data[-window:] if len(data) > window else data
+        return sum(use) / len(use)
 
     def start_capture(self):
         """Begin buffering data for CSV export."""
@@ -532,6 +573,9 @@ class MLXLiveGUI:
             self.X_raw.append(x)
             self.Y_raw.append(y)
             self.Z_raw.append(z)
+            self.X_raw_smooth.append(self._append_sma("comp_x", x))
+            self.Y_raw_smooth.append(self._append_sma("comp_y", y))
+            self.Z_raw_smooth.append(self._append_sma("comp_z", z))
 
             self.Xf_raw.append(fx_raw)
             self.Yf_raw.append(fy_raw)
@@ -546,23 +590,14 @@ class MLXLiveGUI:
             self.Xa_tared.append(ax_t)
             self.Ya_tared.append(ay_t)
             self.Za_tared.append(az_t)
+            self.Xf_tared_smooth.append(self._append_sma("force_x", fx_t))
+            self.Yf_tared_smooth.append(self._append_sma("force_y", fy_t))
+            self.Zf_tared_smooth.append(self._append_sma("force_z", fz_t))
+            self.Xa_tared_smooth.append(self._append_sma("ambient_x", ax_t))
+            self.Ya_tared_smooth.append(self._append_sma("ambient_y", ay_t))
+            self.Za_tared_smooth.append(self._append_sma("ambient_z", az_t))
 
             updated = True
-
-            # Simple Moving Average
-            window = self.sma_window_samples
-
-            xs = list(self.X_raw)[-window:] if len(self.X_raw) > window else list(self.X_raw)
-            ys = list(self.Y_raw)[-window:] if len(self.Y_raw) > window else list(self.Y_raw)
-            zs = list(self.Z_raw)[-window:] if len(self.Z_raw) > window else list(self.Z_raw)
-
-            sma_x = sum(xs) / len(xs) if xs else x
-            sma_y = sum(ys) / len(ys) if ys else y
-            sma_z = sum(zs) / len(zs) if zs else z
-
-            self.X_sma.append(sma_x)
-            self.Y_sma.append(sma_y)
-            self.Z_sma.append(sma_z)
 
             # Calculate forces using compensated values
             grip = self.calculate_grip_force(x, y, z)
@@ -570,16 +605,16 @@ class MLXLiveGUI:
 
             self.grip_force.append(grip)
             self.downforce.append(down)
+            self.grip_force_smooth.append(self._append_sma("grip_force", grip))
+            self.downforce_smooth.append(self._append_sma("downforce", down))
 
-            # SMA for forces
-            grips = list(self.grip_force)[-window:] if len(self.grip_force) > window else list(self.grip_force)
-            downs = list(self.downforce)[-window:] if len(self.downforce) > window else list(self.downforce)
-
-            sma_grip = sum(grips) / len(grips) if grips else grip
-            sma_down = sum(downs) / len(downs) if downs else down
-
-            self.grip_force_sma.append(sma_grip)
-            self.downforce_sma.append(sma_down)
+            # Also compute force from force sensor only (no ambient compensation)
+            grip_noncomp = self.calculate_grip_force(fx_t, fy_t, fz_t)
+            down_noncomp = self.calculate_downforce(fx_t, fy_t, fz_t)
+            self.grip_force_noncomp.append(grip_noncomp)
+            self.downforce_noncomp.append(down_noncomp)
+            self.grip_force_noncomp_smooth.append(self._append_sma("grip_force_noncomp", grip_noncomp))
+            self.downforce_noncomp_smooth.append(self._append_sma("downforce_noncomp", down_noncomp))
 
             # Capture if active
             if self.capture_active:
@@ -601,9 +636,9 @@ class MLXLiveGUI:
                 self.X_raw.popleft()
                 self.Y_raw.popleft()
                 self.Z_raw.popleft()
-                self.X_sma.popleft()
-                self.Y_sma.popleft()
-                self.Z_sma.popleft()
+                self.X_raw_smooth.popleft()
+                self.Y_raw_smooth.popleft()
+                self.Z_raw_smooth.popleft()
                 self.Xf_raw.popleft()
                 self.Yf_raw.popleft()
                 self.Zf_raw.popleft()
@@ -616,12 +651,33 @@ class MLXLiveGUI:
                 self.Xa_tared.popleft()
                 self.Ya_tared.popleft()
                 self.Za_tared.popleft()
+                self.Xf_tared_smooth.popleft()
+                self.Yf_tared_smooth.popleft()
+                self.Zf_tared_smooth.popleft()
+                self.Xa_tared_smooth.popleft()
+                self.Ya_tared_smooth.popleft()
+                self.Za_tared_smooth.popleft()
                 self.grip_force.popleft()
                 self.downforce.popleft()
-                self.grip_force_sma.popleft()
-                self.downforce_sma.popleft()
+                self.grip_force_smooth.popleft()
+                self.downforce_smooth.popleft()
+                self.grip_force_noncomp.popleft()
+                self.downforce_noncomp.popleft()
+                self.grip_force_noncomp_smooth.popleft()
+                self.downforce_noncomp_smooth.popleft()
 
         self._update_stream_status()
+
+    def _append_sma(self, key, value):
+        """Append a value to a per-signal SMA state and return the current average."""
+        window = max(1, int(self.smoothing_window_samples))
+        series_window = self._sma_windows.setdefault(key, deque())
+        series_sum = self._sma_sums.get(key, 0.0) + value
+        series_window.append(value)
+        if len(series_window) > window:
+            series_sum -= series_window.popleft()
+        self._sma_sums[key] = series_sum
+        return series_sum / len(series_window)
 
     def _update_plot(self):
         """Update matplotlib canvas with current data."""
@@ -632,27 +688,21 @@ class MLXLiveGUI:
         t_rel = [t - t0 for t in self.times]
 
         if self.top_plot_mode == "force_raw":
-            X_disp = self.Xf_tared
-            Y_disp = self.Yf_tared
-            Z_disp = self.Zf_tared
+            X_disp = self.Xf_tared_smooth
+            Y_disp = self.Yf_tared_smooth
+            Z_disp = self.Zf_tared_smooth
             self.ax_raw.set_title("Force Sensor Tared Magnetic Field (last {:.1f} s)".format(self.history_seconds))
             overlay_label = "Force"
         elif self.top_plot_mode == "ambient_raw":
-            X_disp = self.Xa_tared
-            Y_disp = self.Ya_tared
-            Z_disp = self.Za_tared
+            X_disp = self.Xa_tared_smooth
+            Y_disp = self.Ya_tared_smooth
+            Z_disp = self.Za_tared_smooth
             self.ax_raw.set_title("Ambient Sensor Tared Magnetic Field (last {:.1f} s)".format(self.history_seconds))
             overlay_label = "Ambient"
         else:
-            # Use SMA for compensated display if available
-            if self.X_sma and len(self.X_sma) == len(self.times):
-                X_disp = self.X_sma
-                Y_disp = self.Y_sma
-                Z_disp = self.Z_sma
-            else:
-                X_disp = self.X_raw
-                Y_disp = self.Y_raw
-                Z_disp = self.Z_raw
+            X_disp = self.X_raw_smooth
+            Y_disp = self.Y_raw_smooth
+            Z_disp = self.Z_raw_smooth
             self.ax_raw.set_title("Compensated Magnetic Delta (last {:.1f} s)".format(self.history_seconds))
             overlay_label = "Comp"
 
@@ -691,12 +741,16 @@ class MLXLiveGUI:
             self.ax_raw.set_ylim(ymin_r, ymax_r)
 
         # Update force plot
-        if self.grip_force_sma and len(self.grip_force_sma) == len(self.times):
-            grip_disp = self.grip_force_sma
-            down_disp = self.downforce_sma
+        if self.force_plot_mode == "non_compensated":
+            grip_disp = self.grip_force_noncomp_smooth
+            down_disp = self.downforce_noncomp_smooth
+            force_label = "Raw"
+            self.ax_force.set_title("Force Measurements (Force Sensor Only)")
         else:
-            grip_disp = self.grip_force
-            down_disp = self.downforce
+            grip_disp = self.grip_force_smooth
+            down_disp = self.downforce_smooth
+            force_label = "Comp"
+            self.ax_force.set_title("Force Measurements (Compensated)")
 
         if grip_disp and down_disp:
             self.line_grip.set_data(t_rel, grip_disp)
@@ -707,8 +761,8 @@ class MLXLiveGUI:
 
             # Update text overlay for forces
             self.text_overlay_force.set_text(
-                f"Grip Force: {grip_disp[-1]:6.2f} N\n"
-                f"Downforce: {down_disp[-1]:6.2f} N"
+                f"{force_label} Grip: {grip_disp[-1]:6.2f} N\n"
+                f"{force_label} Down: {down_disp[-1]:6.2f} N"
             )
 
             # Update force axis limits
@@ -812,7 +866,7 @@ def main(args=None):
 
     # Run GUI on main thread
     root = tk.Tk()
-    gui = MLXLiveGUI(root, node, data_queue, history_seconds=5.0)
+    gui = MLXLiveGUI(root, node, data_queue, history_seconds=15.0)
     root.mainloop()
 
     # Cleanup
