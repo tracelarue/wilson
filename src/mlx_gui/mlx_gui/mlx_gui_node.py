@@ -5,7 +5,9 @@ MLX GUI Node - Live visualization of MLX90393 magnetometer data.
 TO EDIT FORCE CALCULATION FORMULAS:
     Find the methods `calculate_grip_force()` and `calculate_downforce()`
     in the MLXLiveGUI class (around line 30-60). Edit the formulas there
-    to change how grip force and downforce are calculated from X, Y, Z values.
+    to change how grip force and downforce are calculated from compensated
+    X, Y, Z values:
+    (mlx_force - tare_force) - (mlx_ambient - tare_ambient)
 """
 
 import rclpy
@@ -28,7 +30,7 @@ from matplotlib.figure import Figure
 
 
 class MLXLiveGUI:
-    """Tkinter GUI for live visualization of MLX90393 magnetometer data from ROS2 /mlx topic."""
+    """Tkinter GUI for live visualization of compensated MLX90393 magnetometer data."""
 
     # ============================================================================
     # FORCE CALCULATION FORMULAS - EDIT THESE TO CHANGE CALCULATIONS
@@ -40,7 +42,7 @@ class MLXLiveGUI:
         Calculate grip force from magnetic field values.
 
         Args:
-            x, y, z: Magnetic field values in µT (after tare)
+            x, y, z: Magnetic field values in µT (after tare and ambient compensation)
 
         Returns:
             Grip force in Newtons
@@ -59,7 +61,7 @@ class MLXLiveGUI:
             (2.84164e-05) * y * z +
             (0.000266599) * z**2
         ) / 40
-        return grip_force
+        return abs(grip_force)
 
     @staticmethod
     def calculate_downforce(x, y, z):
@@ -67,7 +69,7 @@ class MLXLiveGUI:
         Calculate downward force from magnetic field values.
 
         Args:
-            x, y, z: Magnetic field values in µT (after tare)
+            x, y, z: Magnetic field values in µT (after tare and ambient compensation)
 
         Returns:
             Downward force in Newtons
@@ -76,7 +78,7 @@ class MLXLiveGUI:
         """
         # Simple linear formula for downforce
         downforce = x / 40
-        return downforce
+        return abs(downforce)
 
     # ============================================================================
 
@@ -91,31 +93,65 @@ class MLXLiveGUI:
         self.root.geometry("1100x650")
         self.history_seconds = history_seconds
 
-        # Data buffers
+        # Data buffers (compensated delta used for plotting and force formulas)
         self.times = deque()
         self.X_raw = deque()
         self.Y_raw = deque()
         self.Z_raw = deque()
+        self.X_raw_smooth = deque()
+        self.Y_raw_smooth = deque()
+        self.Z_raw_smooth = deque()
 
-        # Tare offsets (applied to raw data)
-        self.tare_x = 0.0
-        self.tare_y = 0.0
-        self.tare_z = 0.0
+        # Raw data buffers (force + ambient)
+        self.Xf_raw = deque()
+        self.Yf_raw = deque()
+        self.Zf_raw = deque()
+        self.Xa_raw = deque()
+        self.Ya_raw = deque()
+        self.Za_raw = deque()
+
+        # Tared data buffers (force + ambient)
+        self.Xf_tared = deque()
+        self.Yf_tared = deque()
+        self.Zf_tared = deque()
+        self.Xa_tared = deque()
+        self.Ya_tared = deque()
+        self.Za_tared = deque()
+        self.Xf_tared_smooth = deque()
+        self.Yf_tared_smooth = deque()
+        self.Zf_tared_smooth = deque()
+        self.Xa_tared_smooth = deque()
+        self.Ya_tared_smooth = deque()
+        self.Za_tared_smooth = deque()
+
+        # Tare offsets (captured simultaneously for force + ambient)
+        self.tare_fx = 0.0
+        self.tare_fy = 0.0
+        self.tare_fz = 0.0
+        self.tare_ax = 0.0
+        self.tare_ay = 0.0
+        self.tare_az = 0.0
 
         self.min_y_raw = -10
         self.max_y_raw = 10
 
-        # Simple Moving Average (SMA) buffers
-        self.sma_window_samples = 5
-        self.X_sma = deque()
-        self.Y_sma = deque()
-        self.Z_sma = deque()
+        # Simple Moving Average (SMA) smoothing applied to plotted lines
+        self.smoothing_window_samples = 40
+        self.tare_window_samples = 20
 
         # Force calculation buffers
         self.grip_force = deque()
         self.downforce = deque()
-        self.grip_force_sma = deque()
-        self.downforce_sma = deque()
+        self.grip_force_smooth = deque()
+        self.downforce_smooth = deque()
+        self.grip_force_noncomp = deque()
+        self.downforce_noncomp = deque()
+        self.grip_force_noncomp_smooth = deque()
+        self.downforce_noncomp_smooth = deque()
+
+        # Rolling SMA state (computed once per incoming sample)
+        self._sma_windows = {}
+        self._sma_sums = {}
 
         self.min_y_force = -1
         self.max_y_force = 1
@@ -123,6 +159,10 @@ class MLXLiveGUI:
         # Capture state
         self.capture_active = False
         self.capture_buffer = []
+        self.top_plot_mode = "compensated"
+        self.top_plot_mode_var = tk.StringVar(value="Plot: Comp")
+        self.force_plot_mode = "compensated"
+        self.force_plot_mode_var = tk.StringVar(value="Force: Comp")
 
         # Styling
         self._init_style()
@@ -211,7 +251,7 @@ class MLXLiveGUI:
 
         subtitle = ttk.Label(
             top,
-            text="ROS2 /mlx subscriber • Axioforce demo",
+            text="ROS2 /mlx + /mlx_ambient • compensated delta",
             style="Status.TLabel"
         )
         subtitle.grid(row=1, column=0, sticky="w", pady=(2, 0))
@@ -234,7 +274,7 @@ class MLXLiveGUI:
         bottom.grid(row=2, column=0, sticky="ew")
 
         bottom.columnconfigure(0, weight=1)
-        for c in range(1, 6):
+        for c in range(1, 7):
             bottom.columnconfigure(c, weight=0)
 
         # Sample rate display
@@ -246,6 +286,18 @@ class MLXLiveGUI:
         self.tare_btn = ttk.Button(bottom, text="Tare", command=self.tare_stream,
                                    style="Secondary.TButton")
         self.tare_btn.grid(row=0, column=1, sticky="e", padx=(5, 5))
+
+        self.plot_mode_btn = ttk.Button(
+            bottom, textvariable=self.top_plot_mode_var, command=self._cycle_top_plot_mode,
+            style="Secondary.TButton"
+        )
+        self.plot_mode_btn.grid(row=0, column=2, sticky="e", padx=(5, 5))
+
+        self.force_mode_btn = ttk.Button(
+            bottom, textvariable=self.force_plot_mode_var, command=self._cycle_force_plot_mode,
+            style="Secondary.TButton"
+        )
+        self.force_mode_btn.grid(row=0, column=3, sticky="e", padx=(5, 5))
 
         # Capture controls (row 1)
         capture_lbl = ttk.Label(bottom, text="Capture:", style="Inline.TLabel")
@@ -289,7 +341,7 @@ class MLXLiveGUI:
         self.fig = Figure(figsize=(10, 8), dpi=100)
         self.fig.patch.set_facecolor("#f4f5f7")
 
-        # Top plot: Raw magnetic field
+        # Top plot: Compensated magnetic delta
         self.ax_raw = self.fig.add_subplot(211)
         self.ax_raw.set_facecolor("#f7f7f7")
         self.ax_raw.grid(axis="y", color="#cccccc", linewidth=0.5, alpha=0.35)
@@ -298,7 +350,7 @@ class MLXLiveGUI:
         self.ax_raw.spines["left"].set_color("#888888")
         self.ax_raw.spines["bottom"].set_color("#888888")
         self.ax_raw.tick_params(colors="#444444")
-        self.ax_raw.set_title("Magnetic Field (last {:.1f} s)".format(self.history_seconds))
+        self.ax_raw.set_title("Compensated Magnetic Delta (last {:.1f} s)".format(self.history_seconds))
         self.ax_raw.set_ylabel("Field (µT)")
         self.ax_raw.tick_params(labelbottom=False)
 
@@ -360,21 +412,65 @@ class MLXLiveGUI:
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.plot_frame)
         self.canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
 
+    def _update_stream_status(self):
+        status = "Status: Streaming"
+        if getattr(self.ros_node, "ambient_stale", True):
+            status += " (Ambient Stale)"
+        if self.capture_active:
+            status += " (Capturing)"
+        self.status_var.set(status)
+
+    def _cycle_top_plot_mode(self):
+        if self.top_plot_mode == "compensated":
+            self.top_plot_mode = "force_raw"
+            self.top_plot_mode_var.set("Plot: Force")
+        elif self.top_plot_mode == "force_raw":
+            self.top_plot_mode = "ambient_raw"
+            self.top_plot_mode_var.set("Plot: Ambient")
+        else:
+            self.top_plot_mode = "compensated"
+            self.top_plot_mode_var.set("Plot: Comp")
+
+    def _cycle_force_plot_mode(self):
+        if self.force_plot_mode == "compensated":
+            self.force_plot_mode = "non_compensated"
+            self.force_plot_mode_var.set("Force: Raw")
+        else:
+            self.force_plot_mode = "compensated"
+            self.force_plot_mode_var.set("Force: Comp")
+
     def tare_stream(self):
-        """Set current magnetic field values as zero offsets."""
-        if self.X_raw and self.Y_raw and self.Z_raw:
-            self.tare_x = self.X_raw[-1]
-            self.tare_y = self.Y_raw[-1]
-            self.tare_z = self.Z_raw[-1]
-            self.ros_node.get_logger().info(f"Tared: X={self.tare_x:.2f}, Y={self.tare_y:.2f}, Z={self.tare_z:.2f}")
-            self.status_var.set("Status: Tared")
-            self.root.after(1000, lambda: self.status_var.set("Status: Streaming"))
+        """Set simultaneous tare offsets for force and ambient sensors."""
+        if self.Xf_raw and self.Yf_raw and self.Zf_raw and self.Xa_raw and self.Ya_raw and self.Za_raw:
+            self.tare_fx = self._trailing_mean(self.Xf_raw, self.tare_window_samples)
+            self.tare_fy = self._trailing_mean(self.Yf_raw, self.tare_window_samples)
+            self.tare_fz = self._trailing_mean(self.Zf_raw, self.tare_window_samples)
+            self.tare_ax = self._trailing_mean(self.Xa_raw, self.tare_window_samples)
+            self.tare_ay = self._trailing_mean(self.Ya_raw, self.tare_window_samples)
+            self.tare_az = self._trailing_mean(self.Za_raw, self.tare_window_samples)
+            self.ros_node.get_logger().info(
+                "Dual tare set: "
+                f"force=({self.tare_fx:.2f}, {self.tare_fy:.2f}, {self.tare_fz:.2f}) "
+                f"ambient=({self.tare_ax:.2f}, {self.tare_ay:.2f}, {self.tare_az:.2f}) "
+                f"from avg of last {self.tare_window_samples} samples"
+            )
+            self.status_var.set("Status: Tared (Dual)")
+            self.root.after(1000, self._update_stream_status)
+
+    @staticmethod
+    def _trailing_mean(values, window):
+        """Mean of the last `window` values (or all available if shorter)."""
+        data = list(values)
+        if not data:
+            return 0.0
+        use = data[-window:] if len(data) > window else data
+        return sum(use) / len(use)
 
     def start_capture(self):
         """Begin buffering data for CSV export."""
         self.capture_active = True
         self.capture_buffer.clear()
-        self.status_var.set("Status: Streaming (Capturing)")
+        self._update_stream_status()
         self.start_cap_btn.config(state="disabled")
         self.stop_cap_btn.config(state="normal")
         self.cancel_cap_btn.config(state="normal")
@@ -388,7 +484,7 @@ class MLXLiveGUI:
         data = list(self.capture_buffer)
         self.capture_buffer.clear()
 
-        self.status_var.set("Status: Streaming")
+        self._update_stream_status()
         self.start_cap_btn.config(state="normal")
         self.stop_cap_btn.config(state="disabled")
         self.cancel_cap_btn.config(state="disabled")
@@ -403,13 +499,29 @@ class MLXLiveGUI:
         try:
             with open(filename, "w", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(["timestamp", "X_uT", "Y_uT", "Z_uT"])
-                for t, x, y, z in data:
+                writer.writerow([
+                    "timestamp",
+                    "force_x_raw_uT", "force_y_raw_uT", "force_z_raw_uT",
+                    "ambient_x_raw_uT", "ambient_y_raw_uT", "ambient_z_raw_uT",
+                    "force_x_tared_uT", "force_y_tared_uT", "force_z_tared_uT",
+                    "ambient_x_tared_uT", "ambient_y_tared_uT", "ambient_z_tared_uT",
+                    "comp_x_uT", "comp_y_uT", "comp_z_uT",
+                    "grip_force_N", "downforce_N",
+                ])
+                for row in data:
+                    (
+                        t, fx_raw, fy_raw, fz_raw, ax_raw, ay_raw, az_raw,
+                        fx_t, fy_t, fz_t, ax_t, ay_t, az_t,
+                        x_comp, y_comp, z_comp, grip, down
+                    ) = row
                     writer.writerow([
                         f"{t:.6f}",
-                        f"{x:.2f}",
-                        f"{y:.2f}",
-                        f"{z:.2f}",
+                        f"{fx_raw:.2f}", f"{fy_raw:.2f}", f"{fz_raw:.2f}",
+                        f"{ax_raw:.2f}", f"{ay_raw:.2f}", f"{az_raw:.2f}",
+                        f"{fx_t:.2f}", f"{fy_t:.2f}", f"{fz_t:.2f}",
+                        f"{ax_t:.2f}", f"{ay_t:.2f}", f"{az_t:.2f}",
+                        f"{x_comp:.2f}", f"{y_comp:.2f}", f"{z_comp:.2f}",
+                        f"{grip:.4f}", f"{down:.4f}",
                     ])
 
             self.ros_node.get_logger().info(f"Capture saved to {filename} ({len(data)} samples)")
@@ -420,7 +532,7 @@ class MLXLiveGUI:
         """Cancel capture without saving."""
         self.capture_active = False
         self.capture_buffer.clear()
-        self.status_var.set("Status: Streaming")
+        self._update_stream_status()
         self.start_cap_btn.config(state="normal")
         self.stop_cap_btn.config(state="disabled")
         self.cancel_cap_btn.config(state="disabled")
@@ -442,54 +554,79 @@ class MLXLiveGUI:
         updated = False
 
         while not self.data_queue.empty():
-            t, x_raw, y_raw, z_raw = self.data_queue.get()
+            t, fx_raw, fy_raw, fz_raw, ax_raw, ay_raw, az_raw = self.data_queue.get()
 
-            # Apply tare offsets
-            x = x_raw - self.tare_x
-            y = y_raw - self.tare_y
-            z = z_raw - self.tare_z
+            # Apply independent tare offsets.
+            fx_t = fx_raw - self.tare_fx
+            fy_t = fy_raw - self.tare_fy
+            fz_t = fz_raw - self.tare_fz
+            ax_t = ax_raw - self.tare_ax
+            ay_t = ay_raw - self.tare_ay
+            az_t = az_raw - self.tare_az
+
+            # Compensated delta: (force_tared - ambient_tared)
+            x = fx_t - ax_t
+            y = fy_t - ay_t
+            z = fz_t - az_t
 
             self.times.append(t)
             self.X_raw.append(x)
             self.Y_raw.append(y)
             self.Z_raw.append(z)
+            self.X_raw_smooth.append(self._append_sma("comp_x", x))
+            self.Y_raw_smooth.append(self._append_sma("comp_y", y))
+            self.Z_raw_smooth.append(self._append_sma("comp_z", z))
+
+            self.Xf_raw.append(fx_raw)
+            self.Yf_raw.append(fy_raw)
+            self.Zf_raw.append(fz_raw)
+            self.Xa_raw.append(ax_raw)
+            self.Ya_raw.append(ay_raw)
+            self.Za_raw.append(az_raw)
+
+            self.Xf_tared.append(fx_t)
+            self.Yf_tared.append(fy_t)
+            self.Zf_tared.append(fz_t)
+            self.Xa_tared.append(ax_t)
+            self.Ya_tared.append(ay_t)
+            self.Za_tared.append(az_t)
+            self.Xf_tared_smooth.append(self._append_sma("force_x", fx_t))
+            self.Yf_tared_smooth.append(self._append_sma("force_y", fy_t))
+            self.Zf_tared_smooth.append(self._append_sma("force_z", fz_t))
+            self.Xa_tared_smooth.append(self._append_sma("ambient_x", ax_t))
+            self.Ya_tared_smooth.append(self._append_sma("ambient_y", ay_t))
+            self.Za_tared_smooth.append(self._append_sma("ambient_z", az_t))
+
             updated = True
 
-            # Capture if active
-            if self.capture_active:
-                self.capture_buffer.append((t, x, y, z))
-
-            # Simple Moving Average
-            window = self.sma_window_samples
-
-            xs = list(self.X_raw)[-window:] if len(self.X_raw) > window else list(self.X_raw)
-            ys = list(self.Y_raw)[-window:] if len(self.Y_raw) > window else list(self.Y_raw)
-            zs = list(self.Z_raw)[-window:] if len(self.Z_raw) > window else list(self.Z_raw)
-
-            sma_x = sum(xs) / len(xs) if xs else x
-            sma_y = sum(ys) / len(ys) if ys else y
-            sma_z = sum(zs) / len(zs) if zs else z
-
-            self.X_sma.append(sma_x)
-            self.Y_sma.append(sma_y)
-            self.Z_sma.append(sma_z)
-
-            # Calculate forces using the formulas
+            # Calculate forces using compensated values
             grip = self.calculate_grip_force(x, y, z)
             down = self.calculate_downforce(x, y, z)
 
             self.grip_force.append(grip)
             self.downforce.append(down)
+            self.grip_force_smooth.append(self._append_sma("grip_force", grip))
+            self.downforce_smooth.append(self._append_sma("downforce", down))
 
-            # SMA for forces
-            grips = list(self.grip_force)[-window:] if len(self.grip_force) > window else list(self.grip_force)
-            downs = list(self.downforce)[-window:] if len(self.downforce) > window else list(self.downforce)
+            # Also compute force from force sensor only (no ambient compensation)
+            grip_noncomp = self.calculate_grip_force(fx_t, fy_t, fz_t)
+            down_noncomp = self.calculate_downforce(fx_t, fy_t, fz_t)
+            self.grip_force_noncomp.append(grip_noncomp)
+            self.downforce_noncomp.append(down_noncomp)
+            self.grip_force_noncomp_smooth.append(self._append_sma("grip_force_noncomp", grip_noncomp))
+            self.downforce_noncomp_smooth.append(self._append_sma("downforce_noncomp", down_noncomp))
 
-            sma_grip = sum(grips) / len(grips) if grips else grip
-            sma_down = sum(downs) / len(downs) if downs else down
-
-            self.grip_force_sma.append(sma_grip)
-            self.downforce_sma.append(sma_down)
+            # Capture if active
+            if self.capture_active:
+                self.capture_buffer.append((
+                    t,
+                    fx_raw, fy_raw, fz_raw,
+                    ax_raw, ay_raw, az_raw,
+                    fx_t, fy_t, fz_t,
+                    ax_t, ay_t, az_t,
+                    x, y, z,
+                    grip, down,
+                ))
 
         # Trim to history window
         if updated:
@@ -499,13 +636,48 @@ class MLXLiveGUI:
                 self.X_raw.popleft()
                 self.Y_raw.popleft()
                 self.Z_raw.popleft()
-                self.X_sma.popleft()
-                self.Y_sma.popleft()
-                self.Z_sma.popleft()
+                self.X_raw_smooth.popleft()
+                self.Y_raw_smooth.popleft()
+                self.Z_raw_smooth.popleft()
+                self.Xf_raw.popleft()
+                self.Yf_raw.popleft()
+                self.Zf_raw.popleft()
+                self.Xa_raw.popleft()
+                self.Ya_raw.popleft()
+                self.Za_raw.popleft()
+                self.Xf_tared.popleft()
+                self.Yf_tared.popleft()
+                self.Zf_tared.popleft()
+                self.Xa_tared.popleft()
+                self.Ya_tared.popleft()
+                self.Za_tared.popleft()
+                self.Xf_tared_smooth.popleft()
+                self.Yf_tared_smooth.popleft()
+                self.Zf_tared_smooth.popleft()
+                self.Xa_tared_smooth.popleft()
+                self.Ya_tared_smooth.popleft()
+                self.Za_tared_smooth.popleft()
                 self.grip_force.popleft()
                 self.downforce.popleft()
-                self.grip_force_sma.popleft()
-                self.downforce_sma.popleft()
+                self.grip_force_smooth.popleft()
+                self.downforce_smooth.popleft()
+                self.grip_force_noncomp.popleft()
+                self.downforce_noncomp.popleft()
+                self.grip_force_noncomp_smooth.popleft()
+                self.downforce_noncomp_smooth.popleft()
+
+        self._update_stream_status()
+
+    def _append_sma(self, key, value):
+        """Append a value to a per-signal SMA state and return the current average."""
+        window = max(1, int(self.smoothing_window_samples))
+        series_window = self._sma_windows.setdefault(key, deque())
+        series_sum = self._sma_sums.get(key, 0.0) + value
+        series_window.append(value)
+        if len(series_window) > window:
+            series_sum -= series_window.popleft()
+        self._sma_sums[key] = series_sum
+        return series_sum / len(series_window)
 
     def _update_plot(self):
         """Update matplotlib canvas with current data."""
@@ -515,17 +687,26 @@ class MLXLiveGUI:
         t0 = self.times[0]
         t_rel = [t - t0 for t in self.times]
 
-        # Use SMA for display if available
-        if self.X_sma and len(self.X_sma) == len(self.times):
-            X_disp = self.X_sma
-            Y_disp = self.Y_sma
-            Z_disp = self.Z_sma
+        if self.top_plot_mode == "force_raw":
+            X_disp = self.Xf_tared_smooth
+            Y_disp = self.Yf_tared_smooth
+            Z_disp = self.Zf_tared_smooth
+            self.ax_raw.set_title("Force Sensor Tared Magnetic Field (last {:.1f} s)".format(self.history_seconds))
+            overlay_label = "Force"
+        elif self.top_plot_mode == "ambient_raw":
+            X_disp = self.Xa_tared_smooth
+            Y_disp = self.Ya_tared_smooth
+            Z_disp = self.Za_tared_smooth
+            self.ax_raw.set_title("Ambient Sensor Tared Magnetic Field (last {:.1f} s)".format(self.history_seconds))
+            overlay_label = "Ambient"
         else:
-            X_disp = self.X_raw
-            Y_disp = self.Y_raw
-            Z_disp = self.Z_raw
+            X_disp = self.X_raw_smooth
+            Y_disp = self.Y_raw_smooth
+            Z_disp = self.Z_raw_smooth
+            self.ax_raw.set_title("Compensated Magnetic Delta (last {:.1f} s)".format(self.history_seconds))
+            overlay_label = "Comp"
 
-        # Update raw magnetic field lines
+        # Update compensated magnetic field lines
         self.line_x_raw.set_data(t_rel, X_disp)
         self.line_y_raw.set_data(t_rel, Y_disp)
         self.line_z_raw.set_data(t_rel, Z_disp)
@@ -534,12 +715,12 @@ class MLXLiveGUI:
         self.shadowY_raw.set_data(t_rel, Y_disp)
         self.shadowZ_raw.set_data(t_rel, Z_disp)
 
-        # Update text overlay for raw data
+        # Update text overlay for compensated data
         if X_disp and Y_disp and Z_disp:
             self.text_overlay_raw.set_text(
-                f"X: {X_disp[-1]:6.2f} µT\n"
-                f"Y: {Y_disp[-1]:6.2f} µT\n"
-                f"Z: {Z_disp[-1]:6.2f} µT"
+                f"{overlay_label} X: {X_disp[-1]:6.2f} µT\n"
+                f"{overlay_label} Y: {Y_disp[-1]:6.2f} µT\n"
+                f"{overlay_label} Z: {Z_disp[-1]:6.2f} µT"
             )
 
         # Update raw axis limits
@@ -560,12 +741,16 @@ class MLXLiveGUI:
             self.ax_raw.set_ylim(ymin_r, ymax_r)
 
         # Update force plot
-        if self.grip_force_sma and len(self.grip_force_sma) == len(self.times):
-            grip_disp = self.grip_force_sma
-            down_disp = self.downforce_sma
+        if self.force_plot_mode == "non_compensated":
+            grip_disp = self.grip_force_noncomp_smooth
+            down_disp = self.downforce_noncomp_smooth
+            force_label = "Raw"
+            self.ax_force.set_title("Force Measurements (Force Sensor Only)")
         else:
-            grip_disp = self.grip_force
-            down_disp = self.downforce
+            grip_disp = self.grip_force_smooth
+            down_disp = self.downforce_smooth
+            force_label = "Comp"
+            self.ax_force.set_title("Force Measurements (Compensated)")
 
         if grip_disp and down_disp:
             self.line_grip.set_data(t_rel, grip_disp)
@@ -576,8 +761,8 @@ class MLXLiveGUI:
 
             # Update text overlay for forces
             self.text_overlay_force.set_text(
-                f"Grip Force: {grip_disp[-1]:6.2f} N\n"
-                f"Downforce: {down_disp[-1]:6.2f} N"
+                f"{force_label} Grip: {grip_disp[-1]:6.2f} N\n"
+                f"{force_label} Down: {down_disp[-1]:6.2f} N"
             )
 
             # Update force axis limits
@@ -611,31 +796,61 @@ class MLXLiveGUI:
 
 
 class MLXGuiNode(Node):
-    """ROS2 node that subscribes to /mlx topic and feeds data to GUI."""
+    """ROS2 node that subscribes to /mlx and /mlx_ambient and feeds combined data to GUI."""
 
     def __init__(self, data_queue):
         super().__init__('mlx_gui_node')
         self.data_queue = data_queue
 
-        self.subscription = self.create_subscription(
+        self.latest_ambient = (0.0, 0.0, 0.0)
+        self.latest_ambient_time = None
+        self.ambient_stale_timeout_s = 0.5
+        self.ambient_stale = True
+
+        self.force_subscription = self.create_subscription(
             MagneticField,
             '/mlx',
             self.mlx_callback,
             10
         )
+        self.ambient_subscription = self.create_subscription(
+            MagneticField,
+            '/mlx_ambient',
+            self.mlx_ambient_callback,
+            10
+        )
 
-        self.get_logger().info("MLX GUI Node started, subscribing to /mlx")
+        self.get_logger().info("MLX GUI Node started, subscribing to /mlx and /mlx_ambient")
+
+    def mlx_ambient_callback(self, msg):
+        """Callback for /mlx_ambient topic - cache latest ambient baseline sample."""
+        self.latest_ambient = (
+            msg.magnetic_field.x,
+            msg.magnetic_field.y,
+            msg.magnetic_field.z,
+        )
+        self.latest_ambient_time = time.time()
+        self.ambient_stale = False
 
     def mlx_callback(self, msg):
-        """Callback for /mlx topic - extract data and push to queue."""
-        # Use current time instead of message timestamp (which may be 0)
+        """Callback for /mlx topic - combine with latest ambient and push to queue."""
         t = time.time()
-        x = msg.magnetic_field.x
-        y = msg.magnetic_field.y
-        z = msg.magnetic_field.z
+        fx = msg.magnetic_field.x
+        fy = msg.magnetic_field.y
+        fz = msg.magnetic_field.z
 
-        self.data_queue.put((t, x, y, z))
-        self.get_logger().debug(f"Received: t={t:.2f}, x={x:.6f}, y={y:.6f}, z={z:.6f}")
+        ax, ay, az = self.latest_ambient
+        if self.latest_ambient_time is None:
+            self.ambient_stale = True
+        else:
+            self.ambient_stale = (t - self.latest_ambient_time) > self.ambient_stale_timeout_s
+
+        # Queue payload: (t, fx, fy, fz, ax, ay, az)
+        self.data_queue.put((t, fx, fy, fz, ax, ay, az))
+        self.get_logger().debug(
+            f"Received force+ambient: t={t:.2f}, f=({fx:.6f},{fy:.6f},{fz:.6f}), "
+            f"a=({ax:.6f},{ay:.6f},{az:.6f}), stale={self.ambient_stale}"
+        )
 
 
 def main(args=None):
@@ -651,7 +866,7 @@ def main(args=None):
 
     # Run GUI on main thread
     root = tk.Tk()
-    gui = MLXLiveGUI(root, node, data_queue, history_seconds=5.0)
+    gui = MLXLiveGUI(root, node, data_queue, history_seconds=15.0)
     root.mainloop()
 
     # Cleanup

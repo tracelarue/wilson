@@ -135,10 +135,10 @@ controller_server:
       min_speed_theta: 0.05
       acc_lim_x: 0.3
       acc_lim_y: 0.0
-      acc_lim_theta: 0.2
+      acc_lim_theta: 0.8
       decel_lim_x: -0.3
       decel_lim_y: 0.0
-      decel_lim_theta: -0.2
+      decel_lim_theta: -0.8
       vx_samples: 25
       vy_samples: 1
       vtheta_samples: 25
@@ -152,12 +152,12 @@ controller_server:
       stateful: True
       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
       BaseObstacle.scale: 8.0
-      PathAlign.scale: 8.0
+      PathAlign.scale: 16.0
       PathAlign.forward_point_distance: 0.2
-      GoalAlign.scale: 8.0
+      GoalAlign.scale: 12.0
       GoalAlign.forward_point_distance: 0.2
-      PathDist.scale: 14.0
-      GoalDist.scale: 14.0
+      PathDist.scale: 22.0
+      GoalDist.scale: 18.0
       RotateToGoal.scale: 35.0
       RotateToGoal.slowing_factor: 5.0
       RotateToGoal.lookahead_time: -1.0
@@ -294,7 +294,7 @@ behavior_server:
     simulate_ahead_time: 2.0
     max_rotational_vel: 0.6
     min_rotational_vel: 0.3
-    rotational_acc_lim: 0.2
+    rotational_acc_lim: 0.8
 
 robot_state_publisher:
   ros__parameters:
@@ -319,8 +319,8 @@ velocity_smoother:
     feedback: "OPEN_LOOP"
     max_velocity: [0.25, 0.0, 0.6]
     min_velocity: [-0.25, 0.0, -1.0]
-    max_accel: [0.3, 0.0, 0.2]
-    max_decel: [-0.3, 0.0, -0.2]
+    max_accel: [0.3, 0.0, 0.8]
+    max_decel: [-0.3, 0.0, -0.8]
     odom_topic: "odom"
     odom_duration: 0.1
     deadband_velocity: [0.03, 0.0, 0.05]

@@ -26,12 +26,17 @@ You can move the arm and gripper to the following states using /move_to_state:
 - close
 - can
 
-You can use send_action_goal get the user a drink from the mini fridge when they ask you for one. To do this follow these steps in this order being very careful to not miss a step:
-1. Use /navigate_to_location to go to mini fridge far. 
-2. Use /mini_fridge to open the mini fridge door with command "open". Use waitms=5000 and timeoutms=6000.
+When simply asked to just grab an object, use send_action_goal to /grab_object with the following goal:
+{targetx: 0.0,
+targety: 0.07, 
+targetz: 0.375}
+
+You can use send_action_goal get the user a drink from the mini fridge when they ask you for one. To do this follow these steps in this order being very careful to not miss a step.:
+1. Use /navigate_to_location to go to mini fridge far. Give the user an update.
+2. Use /mini_fridge to open the mini fridge door with command "open". Use waitms=6000 and timeoutms=9000. Give the user an update.
 3. Use /navigate_to_location to go to mini fridge near.
 4. Use /locate_object to find the requested drink and get its relative coordinates.
-5. Use the x, y, and z coordinates returned from /locate_object to use /grab_object to grab the requested drink.
+5. Use the x, y, and z coordinates returned from /locate_object to use /grab_object to grab the requested drink. Give the user an update.
 6. Use /navigate_to_location to go to mini fridge far.
-7. Use /mini_fridge to close the mini fridge door with command "close". Use waitms=5000 and timeoutms=6000.
-8. Use /navigate_to_location to go to where the user requested the drink be delivered, always including x, y, z, qx, qy, qz, qw.
+7. Use /mini_fridge to close the mini fridge door with command "close". Use waitms=6000 and timeoutms=9000. Give the user an update. 
+8. Use /navigate_to_location to go to where the user requested the drink be delivered, always including x, y, z, qx, qy, qz, qw. Give the user an update. 

@@ -13,7 +13,7 @@ locate_object_action_server:
     max_angular_vel: 0.3  # Reduced cap for less aggressive turning (rad/s)
     min_linear_vel: 0.05   # Minimum non-zero linear velocity to overcome stiction
     min_angular_vel: 0.20  # Minimum non-zero angular velocity to overcome stiction
-    z_offset_correction: 0.033  # Distance correction added to raw z before control
+    z_offset_correction: 0.02  # Distance correction added to raw z before control
 
     # Camera parameters - REAL ROBOT (Arducam ToF)
     # NOTE: These are estimated defaults - tune after testing on real hardware
