@@ -117,7 +117,7 @@ https://github.com/ros-controls/ros2_control_demos/blob/foxy/ros2_control_demo_d
           <param name="max">2.0944</param>
         </command_interface>
         <state_interface name="position">
-          <param name="initial_value">-0.6098</param>
+          <param name="initial_value">-0.9</param>
         </state_interface>
       </joint>
       <joint name="gripper_left_finger_joint">

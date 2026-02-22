@@ -13,7 +13,7 @@ Servo baseServo, shoulderServo, elbowServo, wristServo, gripperServo;
 String inputBuffer = "";
 
 // Current servo positions (tracking) - matches ROS2 "idle" state from SRDF
-int currentBase = 135, currentShoulder = 149, currentElbow = 10, currentWrist = 100, currentGripper = 0;
+int currentBase = 135, currentShoulder = 149, currentElbow = 10, currentWrist = 85, currentGripper = 0;
 unsigned long lastCmdMs = 0;
 bool servosAttached = true;
 #define SERVO_IDLE_TIMEOUT_MS 500
