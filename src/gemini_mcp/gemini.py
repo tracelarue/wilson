@@ -39,9 +39,19 @@ OUTPUT_CHUNK_SIZE = 768  # 32ms at 24kHz
 MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025"
 DEFAULT_VIDEO_MODE = "none"  # Options: "camera", "screen", "none"
 DEFAULT_RESPONSE_MODALITY = "AUDIO"  # Options: "TEXT", "AUDIO"
+INITIAL_CONNECT_MESSAGE = "connect"
+ENABLE_SYNTHETIC_KEEPALIVE = False  # Can trigger 1008 policy errors on some Live API states
+RECONNECT_BASE_DELAY_SECONDS = 1.0
+RECONNECT_MAX_DELAY_SECONDS = 8.0
 
 # System instructions are loaded from separate files based on mode
 # See system_instructions_sim.txt and system_instructions_real.txt
+TOOL_CALL_PACING_INSTRUCTIONS = """
+Tool-calling pace requirements:
+- For multi-step workflows, call the next required tool immediately after receiving the previous tool result.
+- Do not pause between tool calls for extra narration unless the user explicitly asks for detailed play-by-play.
+- Keep status updates short (one sentence) and only at major milestones.
+""".strip()
 
 
 # Simple buffer pool to reduce memory allocations
@@ -314,7 +324,10 @@ class AudioLoop:
         self.active_muting = active_muting
 
         # Load system instructions based on mode
-        self.system_instructions = load_system_instructions(mode)
+        base_system_instructions = load_system_instructions(mode).rstrip()
+        self.system_instructions = (
+            f"{base_system_instructions}\n\n{TOOL_CALL_PACING_INSTRUCTIONS}"
+        )
 
         # Audio format constants
         self.format = pyaudio.paInt16
@@ -394,214 +407,28 @@ class AudioLoop:
         Args:
             tool_call: Tool call request from Gemini containing function calls
         """
-        import re
+        import time
 
         for function_call in tool_call.function_calls:
+            start_time = time.perf_counter()
             print(f"\n🔧 Calling tool: {function_call.name}")
             print(f"   Arguments: {function_call.args}")
 
-            # Track last distance and time for detecting progress and throttling
-            last_distance = None
-            last_sent_time = 0.0
-
-            # Action tools that should stream progress to Gemini
-            action_tools = ['send_action_goal']
-            is_action_tool = function_call.name in action_tools
-
-            # Define progress callback to receive real-time progress notifications
-            async def progress_handler(progress: float, total: float | None, message: str | None):
-                """Handle progress notifications from MCP server and forward to Gemini"""
-                nonlocal last_distance, last_sent_time, is_action_tool
-
-                import time
-
-                # Print RAW feedback for debugging
-                print(f"\n📊 RAW FEEDBACK - progress: {progress}, total: {total}, message: {message}")
-
-                if message:
-                    # Parse feedback data from the message
-                    progress_data = {
-                        "status": "in_progress",
-                        "progress": progress,
-                        "message": message[:500]  # Truncate long messages
-                    }
-
-                    # Extract progress data based on action type
-                    distance = None
-
-                    # Check for grab_object feedback (current_stage and progress_percentage)
-                    if "current_stage" in message or "progress_percentage" in message:
-                        try:
-                            # Look for 'current_stage': 'Planning motion' pattern
-                            stage_match = re.search(r"['\"]current_stage['\"]:\s*['\"]([^'\"]+)['\"]", message)
-                            if stage_match:
-                                progress_data["stage"] = stage_match.group(1)
-                                print(f"   Stage: {stage_match.group(1)}")
-
-                            # Look for 'progress_percentage': 40.0 pattern
-                            percent_match = re.search(r"['\"]progress_percentage['\"]:\s*([0-9.]+)", message)
-                            if percent_match:
-                                progress_data["progress_percentage"] = float(percent_match.group(1))
-                                print(f"   Progress: {float(percent_match.group(1)):.1f}%")
-                        except (ValueError, AttributeError):
-                            pass
-
-                    # Extract distance_remaining for Nav2 actions
-                    elif "distance_remaining" in message:
-                        try:
-                            # Look for 'distance_remaining': 2.84 or "distance_remaining": 2.84
-                            match = re.search(r"['\"]distance_remaining['\"]:\s*([0-9.]+)", message)
-                            if match:
-                                distance = float(match.group(1))
-                                progress_data["distance_remaining"] = distance
-                                print(f"   Distance remaining: {distance:.2f} m")
-                        except (ValueError, AttributeError):
-                            pass
-
-                    # Also check for old format with just 'remaining'
-                    elif "remaining" in message.lower() and "distance_remaining" not in message:
-                        try:
-                            match = re.search(r"['\"]remaining['\"]:\s*([0-9.]+)", message)
-                            if match:
-                                remaining = float(match.group(1))
-                                progress_data["distance_remaining"] = remaining
-                                print(f"   Distance remaining: {remaining:.2f}")
-                        except (ValueError, AttributeError):
-                            pass
-
-                    # Check for completion/status messages
-                    if "completed" in message.lower():
-                        print(f"   {message}")
-                        progress_data["status"] = "completed"
-                    elif "timed out" in message.lower():
-                        print(f"   {message}")
-                        progress_data["status"] = "timeout"
-                    elif "failed" in message.lower() or "error" in message.lower():
-                        print(f"   {message}")
-                        progress_data["status"] = "error"
-                    elif "feedback #" in message.lower():
-                        if progress % 100 == 0:  # Show every 100th feedback
-                            print(f"   Progress update #{int(progress)}")
-                    else:
-                        print(f"   Status: {message}")
-
-                    # Send progress update to Gemini for action tools
-                    print(f"   DEBUG: is_action_tool={is_action_tool}, function_name={function_call.name}")
-                    if is_action_tool:
-                        current_time = time.time()
-
-                        # Much more relaxed conditions - send updates frequently
-                        should_send = False
-
-                        # Send first update immediately
-                        if last_sent_time == 0.0:
-                            should_send = True
-                            print("   >>> First update - will send to Gemini")
-                        # Send every 2 seconds minimum
-                        elif current_time - last_sent_time > 2.0:
-                            should_send = True
-                            print(f"   >>> Time elapsed: {current_time - last_sent_time:.1f}s - will send to Gemini")
-                        # For navigation: also send on distance change
-                        elif distance is not None:
-                            if last_distance is None or abs(last_distance - distance) > 0.5:
-                                should_send = True
-                                print("   >>> Distance changed - will send to Gemini")
-                        # For grab_object: always send if we have stage info
-                        elif "stage" in progress_data:
-                            should_send = True
-                            print("   >>> Stage update - will send to Gemini")
-
-                        if should_send:
-                            try:
-                                # Send intermediate progress response to Gemini
-                                progress_response = types.FunctionResponse(
-                                    response={"Progress": "In progress"},
-                                    #will_continue=True  # More responses coming
-                                )
-                                await self.session.send_tool_response(
-                                    function_responses=progress_response
-                                )
-
-                                # Log what we sent based on the action type
-                                if "distance_remaining" in progress_data:
-                                    print(f"📤 Sent progress to Gemini: {progress_data['distance_remaining']:.2f}m remaining")
-                                elif "stage" in progress_data or "progress_percentage" in progress_data:
-                                    stage_info = progress_data.get('stage', '')
-                                    percent_info = progress_data.get('progress_percentage', '')
-                                    if stage_info and percent_info:
-                                        print(f"📤 Sent progress to Gemini: {stage_info} ({percent_info:.0f}%)")
-                                    elif stage_info:
-                                        print(f"📤 Sent progress to Gemini: {stage_info}")
-                                    elif percent_info:
-                                        print(f"📤 Sent progress to Gemini: {percent_info:.0f}%")
-                                else:
-                                    print("📤 Sent progress to Gemini")
-
-                                last_sent_time = current_time
-                                if distance is not None:
-                                    last_distance = distance
-                            except Exception as e:
-                                # WebSocket errors during progress updates are non-fatal
-                                # The final result will still be sent when action completes
-                                print(f"⚠️ Failed to send progress to Gemini (non-fatal): {e}")
-                                # Stop trying to send more progress after connection issues
-                                is_action_tool = False
-
-            # Execute the tool call through MCP server with progress callback
+            # Execute tool call through MCP server
             # Add custom timeout for navigation actions (5 minutes instead of default 2 minutes)
-            tool_args = function_call.args.copy()
+            tool_args = dict(function_call.args or {})
             if function_call.name == "navigate_to_location":
                 tool_args["timeout"] = 300.0  # 5 minutes for navigation
 
-            result = await self.mcp_session.call_tool(
-                name=function_call.name,
-                arguments=tool_args,
-                #progress_callback=progress_handler,  # Capture progress notifications and forward to Gemini
-            )
-
-            # Check for structured content first (preferred for complex data)
-            if hasattr(result, "structuredContent") and result.structuredContent:
-                import json
-                result_text = json.dumps(result.structuredContent, indent=2)
-            else:
-                # Convert MCP result to JSON-serializable format
-                result_content = []
-                if hasattr(result, "content"):
-                    for content_item in result.content:
-                        # Handle TextContent objects with 'text' attribute
-                        if hasattr(content_item, "text"):
-                            result_content.append(content_item.text)
-                        # Handle objects that can be dumped to dict
-                        elif hasattr(content_item, "model_dump"):
-                            dumped = content_item.model_dump()
-                            if isinstance(dumped, dict):
-                                result_content.append(str(dumped))
-                            else:
-                                result_content.append(str(dumped))
-                        # Handle plain strings
-                        elif isinstance(content_item, str):
-                            result_content.append(content_item)
-                        # Handle dicts
-                        elif isinstance(content_item, dict):
-                            result_content.append(str(content_item))
-                        # Fallback to string conversion
-                        else:
-                            result_content.append(str(content_item))
-
-                # Join content items into a single result string
-                result_text = "\n".join(result_content) if result_content else str(result)
-
-            print(f"\n📥 Raw result_text:\n{result_text}\n")
-
-            # Format response for Gemini - extract status if available
             try:
-                import json
-                result_data = json.loads(result_text)
-                response_data = result_data
-            except (json.JSONDecodeError, ValueError):
-                response_data = {"result": result_text}  # Fallback to string wrapper
-                
-            #print(response_data)
+                result = await self.mcp_session.call_tool(
+                    name=function_call.name,
+                    arguments=tool_args,
+                )
+                response_data = self._parse_tool_result(result)
+            except Exception as e:
+                response_data = {"error": str(e)}
+                print(f"🔴 Tool execution failed for {function_call.name}: {e}")
 
             # Send final response to Gemini
             # IMPORTANT: Never use will_continue=False as it signals failure/retry
@@ -614,16 +441,52 @@ class AudioLoop:
                     # Always omit will_continue - it defaults to None which signals completion
                 )
             ]
-            if is_action_tool:
-                print("   Sending FINAL response (after progress updates)")
-            else:
-                print("   Sending FINAL response (no progress updates)")
-            print(function_responses)
             try:
                 await self.session.send_tool_response(function_responses=function_responses)
-                print(f"✅ Sent final result to Gemini for {function_call.name}")
+                elapsed = time.perf_counter() - start_time
+                print(f"✅ Sent tool result for {function_call.name} in {elapsed:.2f}s")
             except Exception as e:
                 print(f"🔴 Error sending tool response: {e}")
+
+    def _content_item_to_text(self, content_item):
+        """Convert a single MCP content item into a plain string."""
+        if hasattr(content_item, "text"):
+            return content_item.text
+        if hasattr(content_item, "model_dump"):
+            dumped = content_item.model_dump()
+            return json.dumps(dumped, separators=(",", ":"))
+        if isinstance(content_item, dict):
+            return json.dumps(content_item, separators=(",", ":"))
+        return str(content_item)
+
+    def _parse_tool_result(self, result):
+        """
+        Parse MCP tool result into a Gemini function response payload.
+
+        Returns:
+            dict: JSON-serializable payload for FunctionResponse.response
+        """
+        if hasattr(result, "structuredContent") and result.structuredContent is not None:
+            structured = result.structuredContent
+            if isinstance(structured, dict):
+                return structured
+            return {"result": structured}
+
+        if hasattr(result, "content"):
+            result_text = "\n".join(self._content_item_to_text(item) for item in result.content)
+        else:
+            result_text = str(result)
+
+        if not result_text:
+            return {"result": ""}
+
+        try:
+            parsed = json.loads(result_text)
+            if isinstance(parsed, dict):
+                return parsed
+            return {"result": parsed}
+        except (json.JSONDecodeError, ValueError):
+            return {"result": result_text}
 
     def _get_frame(self, cap):
         """
@@ -772,6 +635,25 @@ class AudioLoop:
             except Exception as e:
                 # Keepalive failures are non-critical
                 print(f"⚠️ Keepalive failed (non-fatal): {e}")
+
+    def _iter_nested_exceptions(self, exc):
+        """Yield leaf exceptions from nested ExceptionGroup-like objects."""
+        nested = getattr(exc, "exceptions", None)
+        if nested:
+            for sub_exc in nested:
+                yield from self._iter_nested_exceptions(sub_exc)
+            return
+        yield exc
+
+    def _is_retryable_policy_violation(self, exc):
+        """
+        Detect 1008 policy-violation Live API closures that are safe to reconnect.
+        """
+        for leaf in self._iter_nested_exceptions(exc):
+            message = str(leaf)
+            if "1008" in message and "Operation is not implemented" in message:
+                return True
+        return False
 
     async def listen_audio(self):
         """
@@ -1051,141 +933,160 @@ class AudioLoop:
             emoji = level_emoji.get(params.level, "📝")
             print(f"   {emoji} [{params.level.upper()}] {params.data}")
 
-        # Connect to MCP server using stdio
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write, logging_callback=logging_handler) as mcp_session:
-                # Initialize the connection between client and server
-                await mcp_session.initialize()
+        reconnect_delay = RECONNECT_BASE_DELAY_SECONDS
+        while True:
+            # Connect to MCP server using stdio
+            async with stdio_client(server_params) as (read, write):
+                async with ClientSession(read, write, logging_callback=logging_handler) as mcp_session:
+                    # Initialize the connection between client and server
+                    await mcp_session.initialize()
 
-                # Store MCP session for tool calling
-                self.mcp_session = mcp_session
+                    # Store MCP session for tool calling
+                    self.mcp_session = mcp_session
 
-                # Get available tools from MCP server
-                available_tools = await mcp_session.list_tools()
+                    # Get available tools from MCP server
+                    available_tools = await mcp_session.list_tools()
 
-                # Convert MCP tools to Gemini-compatible format
-                # The Live API does NOT support automatic MCP tool calling
-                # So we must manually convert tools and handle execution
-                functional_tools = []
+                    # Convert MCP tools to Gemini-compatible format
+                    # The Live API does NOT support automatic MCP tool calling
+                    # So we must manually convert tools and handle execution
+                    functional_tools = []
 
-                for tool in available_tools.tools:
-                    tool_description = {"name": tool.name, "description": tool.description}
+                    for tool in available_tools.tools:
+                        tool_description = {"name": tool.name, "description": tool.description}
 
-                    # Process tool parameters if they exist
-                    if tool.inputSchema["properties"]:
-                        tool_description["parameters"] = {
-                            "type": tool.inputSchema["type"],
-                            "properties": {},
-                        }
-
-                        # Convert each parameter to Gemini format
-                        for param_name in tool.inputSchema["properties"]:
-                            param_schema = tool.inputSchema["properties"][param_name]
-
-                            # Handle direct type or anyOf union types
-                            if "type" in param_schema:
-                                param_type = param_schema["type"]
-                            elif "anyOf" in param_schema:
-                                # For anyOf, use the first non-null type
-                                param_type = "string"  # default fallback
-                                for type_option in param_schema["anyOf"]:
-                                    if type_option.get("type") != "null":
-                                        param_type = type_option["type"]
-                                        break
-                            else:
-                                param_type = "string"  # Fallback default
-
-                            # Build parameter definition
-                            param_definition = {
-                                "type": param_type,
-                                "description": "",
+                        # Process tool parameters if they exist
+                        if tool.inputSchema["properties"]:
+                            tool_description["parameters"] = {
+                                "type": tool.inputSchema["type"],
+                                "properties": {},
                             }
 
-                            # Handle array types that need items specification
-                            if param_type == "array" and "items" in param_schema:
-                                items_schema = param_schema["items"]
-                                if "type" in items_schema:
-                                    param_definition["items"] = {"type": items_schema["type"]}
-                                else:
-                                    # Default to object for complex array items
-                                    param_definition["items"] = {"type": "object"}
+                            # Convert each parameter to Gemini format
+                            for param_name in tool.inputSchema["properties"]:
+                                param_schema = tool.inputSchema["properties"][param_name]
 
-                            tool_description["parameters"]["properties"][param_name] = (
-                                param_definition
+                                # Handle direct type or anyOf union types
+                                if "type" in param_schema:
+                                    param_type = param_schema["type"]
+                                elif "anyOf" in param_schema:
+                                    # For anyOf, use the first non-null type
+                                    param_type = "string"  # default fallback
+                                    for type_option in param_schema["anyOf"]:
+                                        if type_option.get("type") != "null":
+                                            param_type = type_option["type"]
+                                            break
+                                else:
+                                    param_type = "string"  # Fallback default
+
+                                # Build parameter definition
+                                param_definition = {
+                                    "type": param_type,
+                                    "description": "",
+                                }
+
+                                # Handle array types that need items specification
+                                if param_type == "array" and "items" in param_schema:
+                                    items_schema = param_schema["items"]
+                                    if "type" in items_schema:
+                                        param_definition["items"] = {"type": items_schema["type"]}
+                                    else:
+                                        # Default to object for complex array items
+                                        param_definition["items"] = {"type": "object"}
+
+                                tool_description["parameters"]["properties"][param_name] = (
+                                    param_definition
+                                )
+
+                            # Add required parameters list if specified
+                            if "required" in tool.inputSchema:
+                                tool_description["parameters"]["required"] = tool.inputSchema[
+                                    "required"
+                                ]
+
+                        functional_tools.append(tool_description)
+
+                    # Configure Gemini Live tools (MCP tools + built-in capabilities)
+                    tools = [
+                        {
+                            "function_declarations": functional_tools,
+                            #"code_execution": {},  # Enable code execution
+                            #"google_search": {},  # Enable web search
+                        },
+                    ]
+
+                    # Configure Gemini Live session
+                    live_config = types.LiveConnectConfig(
+                        response_modalities=[
+                            self.response_modality
+                        ],  # "Enable text or audio responses based on configuration"
+                        speech_config=types.SpeechConfig(
+                            voice_config=types.VoiceConfig(
+                                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Charon")
+                            )
+                        ),
+                        system_instruction=types.Content(parts=[types.Part(text=self.system_instructions)]),
+                        tools=tools,
+                    )
+
+                    try:
+                        # Start Gemini Live session and create task group
+                        async with (
+                            client.aio.live.connect(model=MODEL, config=live_config) as session,
+                            asyncio.TaskGroup() as task_group,
+                        ):
+                            self.session = session
+
+                            # Initialize communication queues
+                            self.audio_in_queue = asyncio.Queue(maxsize=400)  # Audio from Gemini (buffer for smooth playback)
+                            self.out_queue = asyncio.Queue(maxsize=3)  # Data to Gemini (small buffer for low latency)
+
+                            # Send an initial one-time turn to establish context/state.
+                            await self.session.send_client_content(
+                                turns={"role": "user", "parts": [{"text": INITIAL_CONNECT_MESSAGE}]},
+                                turn_complete=True,
                             )
 
-                        # Add required parameters list if specified
-                        if "required" in tool.inputSchema:
-                            tool_description["parameters"]["required"] = tool.inputSchema[
-                                "required"
-                            ]
+                            # Start all async tasks
+                            send_text_task = task_group.create_task(self.send_text())
+                            task_group.create_task(self.send_realtime())
+                            if ENABLE_SYNTHETIC_KEEPALIVE:
+                                task_group.create_task(self.websocket_keepalive())
+                            task_group.create_task(self.listen_audio())
 
+                            # Start video capture based on selected mode
+                            if self.video_mode == "camera":
+                                task_group.create_task(self.get_frames())
+                            elif self.video_mode == "screen":
+                                task_group.create_task(self.get_screen())
 
-                    functional_tools.append(tool_description)
+                            # Start audio processing tasks
+                            task_group.create_task(self.receive_audio())
+                            task_group.create_task(self.play_audio())
 
-                # Configure Gemini Live tools (MCP tools + built-in capabilities)
-                tools = [
-                    {
-                        "function_declarations": functional_tools,
-                        #"code_execution": {},  # Enable code execution
-                        #"google_search": {},  # Enable web search
-                    },
-                ]
+                            # Wait for user to quit (send_text_task completes when user types 'q')
+                            await send_text_task
+                            raise asyncio.CancelledError("User requested exit")
 
-                # Configure Gemini Live session
-                live_config = types.LiveConnectConfig(
-                    response_modalities=[
-                        self.response_modality
-                    ],  # "Enable text or audio responses based on configuration"
-                    speech_config=types.SpeechConfig(
-                        voice_config=types.VoiceConfig(
-                            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Charon")
-                        )
-                    ),
-                    system_instruction=types.Content(parts=[types.Part(text=self.system_instructions)]),
-                    tools=tools,
-                )
+                    except asyncio.CancelledError:
+                        # Normal exit when user types 'q'
+                        return
+                    except asyncio.ExceptionGroup as exception_group:
+                        # Handle any errors that occurred in the task group
+                        if hasattr(self, 'audio_stream') and self.audio_stream is not None:
+                            self.audio_stream.close()
 
-                try:
-                    # Start Gemini Live session and create task group
-                    async with (
-                        client.aio.live.connect(model=MODEL, config=live_config) as session,
-                        asyncio.TaskGroup() as task_group,
-                    ):
-                        self.session = session
+                        if self._is_retryable_policy_violation(exception_group):
+                            print(
+                                f"⚠️ Live API closed with policy violation (1008). "
+                                f"Reconnecting in {reconnect_delay:.1f}s..."
+                            )
+                            await asyncio.sleep(reconnect_delay)
+                            reconnect_delay = min(reconnect_delay * 2.0, RECONNECT_MAX_DELAY_SECONDS)
+                            continue
 
-                        # Initialize communication queues
-                        self.audio_in_queue = asyncio.Queue(maxsize=400)  # Audio from Gemini (buffer for smooth playback)
-                        self.out_queue = asyncio.Queue(maxsize=3)  # Data to Gemini (small buffer for low latency)
-
-                        # Start all async tasks
-                        send_text_task = task_group.create_task(self.send_text())
-                        task_group.create_task(self.send_realtime())
-                        task_group.create_task(self.websocket_keepalive())  # Prevent timeout during long operations
-                        task_group.create_task(self.listen_audio())
-
-                        # Start video capture based on selected mode
-                        if self.video_mode == "camera":
-                            task_group.create_task(self.get_frames())
-                        elif self.video_mode == "screen":
-                            task_group.create_task(self.get_screen())
-
-                        # Start audio processing tasks
-                        task_group.create_task(self.receive_audio())
-                        task_group.create_task(self.play_audio())
-
-                        # Wait for user to quit (send_text_task completes when user types 'q')
-                        await send_text_task
-                        raise asyncio.CancelledError("User requested exit")
-
-                except asyncio.CancelledError:
-                    # Normal exit when user types 'q'
-                    pass
-                except asyncio.ExceptionGroup as exception_group:
-                    # Handle any errors that occurred in the task group
-                    if hasattr(self, 'audio_stream') and self.audio_stream is not None:
-                        self.audio_stream.close()
-                    traceback.print_exception(exception_group)
+                        traceback.print_exception(exception_group)
+                        return
 
 
 if __name__ == "__main__":
