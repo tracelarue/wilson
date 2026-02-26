@@ -23,7 +23,7 @@ https://github.com/ros-controls/ros2_control_demos/blob/foxy/ros2_control_demo_d
         </xacro:if>
         <xacro:unless value="${use_fake_hardware}">
           <hardware>
-            <plugin>diffdrive_arduino/DiffDriveArduinoHardware</plugin>
+            <plugin>diff_drive_interface/DiffDriveInterface</plugin>
             <param name="left_wheel_name">left_wheel_joint</param>
             <param name="right_wheel_name">right_wheel_joint</param>
             <param name="loop_rate">30</param>

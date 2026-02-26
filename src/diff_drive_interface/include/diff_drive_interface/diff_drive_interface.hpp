@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DIFFDRIVE_ARDUINO__DIFFBOT_SYSTEM_HPP_
-#define DIFFDRIVE_ARDUINO__DIFFBOT_SYSTEM_HPP_
+#ifndef DIFF_DRIVE_INTERFACE__DIFF_DRIVE_INTERFACE_HPP_
+#define DIFF_DRIVE_INTERFACE__DIFF_DRIVE_INTERFACE_HPP_
 
 #include <memory>
 #include <string>
@@ -29,14 +29,14 @@
 #include "rclcpp/time.hpp"
 #include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 #include "rclcpp_lifecycle/state.hpp"
-#include "diffdrive_arduino/visibility_control.h"
+#include "diff_drive_interface/visibility_control.h"
 
-#include "diffdrive_arduino/arduino_comms.hpp"
-#include "diffdrive_arduino/wheel.hpp"
+#include "diff_drive_interface/arduino_comms.hpp"
+#include "diff_drive_interface/wheel.hpp"
 
-namespace diffdrive_arduino
+namespace diff_drive_interface
 {
-class DiffDriveArduinoHardware : public hardware_interface::SystemInterface
+class DiffDriveInterface : public hardware_interface::SystemInterface
 {
 
 struct Config
@@ -56,40 +56,40 @@ struct Config
 
 
 public:
-  RCLCPP_SHARED_PTR_DEFINITIONS(DiffDriveArduinoHardware);
+  RCLCPP_SHARED_PTR_DEFINITIONS(DiffDriveInterface);
 
-  DIFFDRIVE_ARDUINO_PUBLIC
+  DIFF_DRIVE_INTERFACE_PUBLIC
   hardware_interface::CallbackReturn on_init(
     const hardware_interface::HardwareInfo & info) override;
 
-  DIFFDRIVE_ARDUINO_PUBLIC
+  DIFF_DRIVE_INTERFACE_PUBLIC
   std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
 
-  DIFFDRIVE_ARDUINO_PUBLIC
+  DIFF_DRIVE_INTERFACE_PUBLIC
   std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
 
-  DIFFDRIVE_ARDUINO_PUBLIC
+  DIFF_DRIVE_INTERFACE_PUBLIC
   hardware_interface::CallbackReturn on_configure(
     const rclcpp_lifecycle::State & previous_state) override;
 
-  DIFFDRIVE_ARDUINO_PUBLIC
+  DIFF_DRIVE_INTERFACE_PUBLIC
   hardware_interface::CallbackReturn on_cleanup(
     const rclcpp_lifecycle::State & previous_state) override;
 
 
-  DIFFDRIVE_ARDUINO_PUBLIC
+  DIFF_DRIVE_INTERFACE_PUBLIC
   hardware_interface::CallbackReturn on_activate(
     const rclcpp_lifecycle::State & previous_state) override;
 
-  DIFFDRIVE_ARDUINO_PUBLIC
+  DIFF_DRIVE_INTERFACE_PUBLIC
   hardware_interface::CallbackReturn on_deactivate(
     const rclcpp_lifecycle::State & previous_state) override;
 
-  DIFFDRIVE_ARDUINO_PUBLIC
+  DIFF_DRIVE_INTERFACE_PUBLIC
   hardware_interface::return_type read(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
-  DIFFDRIVE_ARDUINO_PUBLIC
+  DIFF_DRIVE_INTERFACE_PUBLIC
   hardware_interface::return_type write(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
@@ -101,6 +101,6 @@ private:
   Wheel wheel_r_;
 };
 
-}  // namespace diffdrive_arduino
+}  // namespace diff_drive_interface
 
-#endif  // DIFFDRIVE_ARDUINO__DIFFBOT_SYSTEM_HPP_
+#endif  // DIFF_DRIVE_INTERFACE__DIFF_DRIVE_INTERFACE_HPP_

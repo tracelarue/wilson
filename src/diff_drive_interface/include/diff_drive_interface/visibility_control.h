@@ -19,38 +19,38 @@
  * library cannot have, but the consuming code must have inorder to link.
  */
 
-#ifndef DIFFDRIVE_ARDUINO__VISIBILITY_CONTROL_H_
-#define DIFFDRIVE_ARDUINO__VISIBILITY_CONTROL_H_
+#ifndef DIFF_DRIVE_INTERFACE__VISIBILITY_CONTROL_H_
+#define DIFF_DRIVE_INTERFACE__VISIBILITY_CONTROL_H_
 
 // This logic was borrowed (then namespaced) from the examples on the gcc wiki:
 //     https://gcc.gnu.org/wiki/Visibility
 
 #if defined _WIN32 || defined __CYGWIN__
 #ifdef __GNUC__
-#define DIFFDRIVE_ARDUINO_EXPORT __attribute__((dllexport))
-#define DIFFDRIVE_ARDUINO_IMPORT __attribute__((dllimport))
+#define DIFF_DRIVE_INTERFACE_EXPORT __attribute__((dllexport))
+#define DIFF_DRIVE_INTERFACE_IMPORT __attribute__((dllimport))
 #else
-#define DIFFDRIVE_ARDUINO_EXPORT __declspec(dllexport)
-#define DIFFDRIVE_ARDUINO_IMPORT __declspec(dllimport)
+#define DIFF_DRIVE_INTERFACE_EXPORT __declspec(dllexport)
+#define DIFF_DRIVE_INTERFACE_IMPORT __declspec(dllimport)
 #endif
-#ifdef DIFFDRIVE_ARDUINO_BUILDING_DLL
-#define DIFFDRIVE_ARDUINO_PUBLIC DIFFDRIVE_ARDUINO_EXPORT
+#ifdef DIFF_DRIVE_INTERFACE_BUILDING_DLL
+#define DIFF_DRIVE_INTERFACE_PUBLIC DIFF_DRIVE_INTERFACE_EXPORT
 #else
-#define DIFFDRIVE_ARDUINO_PUBLIC DIFFDRIVE_ARDUINO_IMPORT
+#define DIFF_DRIVE_INTERFACE_PUBLIC DIFF_DRIVE_INTERFACE_IMPORT
 #endif
-#define DIFFDRIVE_ARDUINO_PUBLIC_TYPE DIFFDRIVE_ARDUINO_PUBLIC
-#define DIFFDRIVE_ARDUINO_LOCAL
+#define DIFF_DRIVE_INTERFACE_PUBLIC_TYPE DIFF_DRIVE_INTERFACE_PUBLIC
+#define DIFF_DRIVE_INTERFACE_LOCAL
 #else
-#define DIFFDRIVE_ARDUINO_EXPORT __attribute__((visibility("default")))
-#define DIFFDRIVE_ARDUINO_IMPORT
+#define DIFF_DRIVE_INTERFACE_EXPORT __attribute__((visibility("default")))
+#define DIFF_DRIVE_INTERFACE_IMPORT
 #if __GNUC__ >= 4
-#define DIFFDRIVE_ARDUINO_PUBLIC __attribute__((visibility("default")))
-#define DIFFDRIVE_ARDUINO_LOCAL __attribute__((visibility("hidden")))
+#define DIFF_DRIVE_INTERFACE_PUBLIC __attribute__((visibility("default")))
+#define DIFF_DRIVE_INTERFACE_LOCAL __attribute__((visibility("hidden")))
 #else
-#define DIFFDRIVE_ARDUINO_PUBLIC
-#define DIFFDRIVE_ARDUINO_LOCAL
+#define DIFF_DRIVE_INTERFACE_PUBLIC
+#define DIFF_DRIVE_INTERFACE_LOCAL
 #endif
-#define DIFFDRIVE_ARDUINO_PUBLIC_TYPE
+#define DIFF_DRIVE_INTERFACE_PUBLIC_TYPE
 #endif
 
-#endif  // DIFFDRIVE_ARDUINO__VISIBILITY_CONTROL_H_
+#endif  // DIFF_DRIVE_INTERFACE__VISIBILITY_CONTROL_H_
