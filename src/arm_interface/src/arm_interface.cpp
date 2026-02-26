@@ -1,4 +1,4 @@
-#include "arduinobot_controller/arduinobot_interface.hpp"
+#include "arm_interface/arm_interface.hpp"
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 #include <pluginlib/class_list_macros.hpp>
 #include <thread>
@@ -7,7 +7,7 @@
 #include <vector>
 
 
-namespace arduinobot_controller
+namespace arm_interface
 {
 
 std::string compensateZeros(const int value)
@@ -23,12 +23,12 @@ std::string compensateZeros(const int value)
   return compensate_zeros;
 }
   
-ArduinobotInterface::ArduinobotInterface()
+ArmInterface::ArmInterface()
 {
 }
 
 
-ArduinobotInterface::~ArduinobotInterface()
+ArmInterface::~ArmInterface()
 {
   // Stop executor thread
   executor_running_ = false;
@@ -45,14 +45,14 @@ ArduinobotInterface::~ArduinobotInterface()
     }
     catch (...)
     {
-      RCLCPP_FATAL_STREAM(rclcpp::get_logger("ArduinobotInterface"),
+      RCLCPP_FATAL_STREAM(rclcpp::get_logger("ArmInterface"),
                           "Something went wrong while closing connection with port " << port_);
     }
   }
 }
 
 
-CallbackReturn ArduinobotInterface::on_init(const hardware_interface::HardwareInfo &hardware_info)
+CallbackReturn ArmInterface::on_init(const hardware_interface::HardwareInfo &hardware_info)
 {
   CallbackReturn result = hardware_interface::SystemInterface::on_init(hardware_info);
   if (result != CallbackReturn::SUCCESS)
@@ -66,7 +66,7 @@ CallbackReturn ArduinobotInterface::on_init(const hardware_interface::HardwareIn
   }
   catch (const std::out_of_range &e)
   {
-    RCLCPP_FATAL(rclcpp::get_logger("ArduinobotInterface"), "No Serial Port provided! Aborting");
+    RCLCPP_FATAL(rclcpp::get_logger("ArmInterface"), "No Serial Port provided! Aborting");
     return CallbackReturn::FAILURE;
   }
 
@@ -85,7 +85,7 @@ CallbackReturn ArduinobotInterface::on_init(const hardware_interface::HardwareIn
     position_states_[i] = initial_positions[i];
     prev_position_commands_[i] = initial_positions[i];
 
-    RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"),
+    RCLCPP_INFO(rclcpp::get_logger("ArmInterface"),
                "Joint %s initial position: %f rad",
                info_.joints[i].name.c_str(), initial_positions[i]);
   }
@@ -119,12 +119,12 @@ CallbackReturn ArduinobotInterface::on_init(const hardware_interface::HardwareIn
       }
     });
 
-    RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"),
+    RCLCPP_INFO(rclcpp::get_logger("ArmInterface"),
                 "MLX sensor publishers initialized on topics /mlx and /mlx_ambient");
   }
   catch (const std::exception& e)
   {
-    RCLCPP_ERROR_STREAM(rclcpp::get_logger("ArduinobotInterface"),
+    RCLCPP_ERROR_STREAM(rclcpp::get_logger("ArmInterface"),
                         "Failed to initialize MLX publisher: " << e.what());
     return CallbackReturn::FAILURE;
   }
@@ -133,7 +133,7 @@ CallbackReturn ArduinobotInterface::on_init(const hardware_interface::HardwareIn
 }
 
 
-std::vector<hardware_interface::StateInterface> ArduinobotInterface::export_state_interfaces()
+std::vector<hardware_interface::StateInterface> ArmInterface::export_state_interfaces()
 {
   std::vector<hardware_interface::StateInterface> state_interfaces;
 
@@ -148,7 +148,7 @@ std::vector<hardware_interface::StateInterface> ArduinobotInterface::export_stat
 }
 
 
-std::vector<hardware_interface::CommandInterface> ArduinobotInterface::export_command_interfaces()
+std::vector<hardware_interface::CommandInterface> ArmInterface::export_command_interfaces()
 {
   std::vector<hardware_interface::CommandInterface> command_interfaces;
 
@@ -163,9 +163,9 @@ std::vector<hardware_interface::CommandInterface> ArduinobotInterface::export_co
 }
 
 
-CallbackReturn ArduinobotInterface::on_activate(const rclcpp_lifecycle::State &previous_state)
+CallbackReturn ArmInterface::on_activate(const rclcpp_lifecycle::State &previous_state)
 {
-  RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), "Starting robot hardware ...");
+  RCLCPP_INFO(rclcpp::get_logger("ArmInterface"), "Starting robot hardware ...");
 
   try
   {
@@ -174,27 +174,27 @@ CallbackReturn ArduinobotInterface::on_activate(const rclcpp_lifecycle::State &p
   }
   catch (...)
   {
-    RCLCPP_FATAL_STREAM(rclcpp::get_logger("ArduinobotInterface"),
+    RCLCPP_FATAL_STREAM(rclcpp::get_logger("ArmInterface"),
                         "Something went wrong while interacting with port " << port_);
     return CallbackReturn::FAILURE;
   }
 
   // Use the manual initial positions set in on_init() instead of reading from Arduino
-  RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), 
+  RCLCPP_INFO(rclcpp::get_logger("ArmInterface"), 
               "Using manual initial positions - not reading current servo positions from Arduino");
 
   // Initialize previous commands to match current commands
   prev_position_commands_ = position_commands_;
 
-  RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"),
+  RCLCPP_INFO(rclcpp::get_logger("ArmInterface"),
               "Hardware started, ready to take commands");
   return CallbackReturn::SUCCESS;
 }
 
 
-CallbackReturn ArduinobotInterface::on_deactivate(const rclcpp_lifecycle::State &previous_state)
+CallbackReturn ArmInterface::on_deactivate(const rclcpp_lifecycle::State &previous_state)
 {
-  RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), "Stopping robot hardware ...");
+  RCLCPP_INFO(rclcpp::get_logger("ArmInterface"), "Stopping robot hardware ...");
 
   // Stop executor
   executor_running_ = false;
@@ -216,17 +216,17 @@ CallbackReturn ArduinobotInterface::on_deactivate(const rclcpp_lifecycle::State 
     }
     catch (...)
     {
-      RCLCPP_FATAL_STREAM(rclcpp::get_logger("ArduinobotInterface"),
+      RCLCPP_FATAL_STREAM(rclcpp::get_logger("ArmInterface"),
                           "Something went wrong while closing connection with port " << port_);
     }
   }
 
-  RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), "Hardware stopped");
+  RCLCPP_INFO(rclcpp::get_logger("ArmInterface"), "Hardware stopped");
   return CallbackReturn::SUCCESS;
 }
 
 
-hardware_interface::return_type ArduinobotInterface::read(const rclcpp::Time &time,
+hardware_interface::return_type ArmInterface::read(const rclcpp::Time &time,
                                                           const rclcpp::Duration &period)
 {
   // Open Loop Control - assuming the robot is always where we command to be
@@ -276,7 +276,7 @@ hardware_interface::return_type ArduinobotInterface::read(const rclcpp::Time &ti
   return hardware_interface::return_type::OK;
 }
 
-hardware_interface::return_type ArduinobotInterface::write(const rclcpp::Time &time,
+hardware_interface::return_type ArmInterface::write(const rclcpp::Time &time,
                                                            const rclcpp::Duration &period)
 {
   if (position_commands_ == prev_position_commands_)
@@ -286,7 +286,7 @@ hardware_interface::return_type ArduinobotInterface::write(const rclcpp::Time &t
   }
 
   // Debug: Log the command positions
-  //RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"), 
+  //RCLCPP_INFO(rclcpp::get_logger("ArmInterface"), 
   //            "Received command: j1=%.3f, j2=%.3f, j3=%.3f, j4=%.3f, gripper=%.3f",
   //            position_commands_[0], position_commands_[1], position_commands_[2], 
   //            position_commands_[3], position_commands_[4]);
@@ -323,12 +323,12 @@ hardware_interface::return_type ArduinobotInterface::write(const rclcpp::Time &t
 
   try
   {
-    RCLCPP_INFO_STREAM(rclcpp::get_logger("ArduinobotInterface"), "Sending new command " << msg);
+    RCLCPP_INFO_STREAM(rclcpp::get_logger("ArmInterface"), "Sending new command " << msg);
     arduino_.Write(msg);
   }
   catch (...)
   {
-    RCLCPP_ERROR_STREAM(rclcpp::get_logger("ArduinobotInterface"),
+    RCLCPP_ERROR_STREAM(rclcpp::get_logger("ArmInterface"),
                         "Something went wrong while sending the message "
                             << msg << " to the port " << port_);
     return hardware_interface::return_type::ERROR;
@@ -339,7 +339,7 @@ hardware_interface::return_type ArduinobotInterface::write(const rclcpp::Time &t
   return hardware_interface::return_type::OK;
 }
 
-bool ArduinobotInterface::parseMLXData(const std::string& line)
+bool ArmInterface::parseMLXData(const std::string& line)
 {
   // MLX sensor data format: "x,y,z,ax,ay,az\n" (6 comma-separated values)
   // Position response format: "base,shoulder,elbow,wrist,gripper\n" (5 values)
@@ -375,7 +375,7 @@ bool ArduinobotInterface::parseMLXData(const std::string& line)
     // static int log_count = 0;
     // if (++log_count % 10 == 0)  // Log every 10 readings to avoid spam
     // {
-    //   RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"),
+    //   RCLCPP_INFO(rclcpp::get_logger("ArmInterface"),
     //               "MLX parsed: x=%.2f, y=%.2f, z=%.2f, ax=%.2f, ay=%.2f, az=%.2f",
     //               mlx_x_, mlx_y_, mlx_z_, mlx_ambient_x_, mlx_ambient_y_, mlx_ambient_z_);
     // }
@@ -385,6 +385,6 @@ bool ArduinobotInterface::parseMLXData(const std::string& line)
 
   return false; // Not MLX data (could be position response with 5 values)
 }
-}  // namespace arduinobot_controller
+}  // namespace arm_interface
 
-PLUGINLIB_EXPORT_CLASS(arduinobot_controller::ArduinobotInterface, hardware_interface::SystemInterface)
+PLUGINLIB_EXPORT_CLASS(arm_interface::ArmInterface, hardware_interface::SystemInterface)

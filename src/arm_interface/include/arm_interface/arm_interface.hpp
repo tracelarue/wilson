@@ -1,5 +1,5 @@
-#ifndef ARDUINOBOT_INTERFACE_H
-#define ARDUINOBOT_INTERFACE_H
+#ifndef ARM_INTERFACE_ARM_INTERFACE_H
+#define ARM_INTERFACE_ARM_INTERFACE_H
 
 #include <rclcpp/rclcpp.hpp>
 #include <hardware_interface/system_interface.hpp>
@@ -15,16 +15,16 @@
 #include <memory>
 
 
-namespace arduinobot_controller
+namespace arm_interface
 {
 
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
-class ArduinobotInterface : public hardware_interface::SystemInterface
+class ArmInterface : public hardware_interface::SystemInterface
 {
 public:
-  ArduinobotInterface();
-  virtual ~ArduinobotInterface();
+  ArmInterface();
+  virtual ~ArmInterface();
 
   // Implementing rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface
   virtual CallbackReturn on_activate(const rclcpp_lifecycle::State &previous_state) override;
@@ -63,7 +63,7 @@ private:
   // Helper method
   bool parseMLXData(const std::string& line);
 };
-}  // namespace arduinobot_controller
+}  // namespace arm_interface
 
 
-#endif  // ARDUINOBOT_INTERFACE_H
+#endif  // ARM_INTERFACE_ARM_INTERFACE_H

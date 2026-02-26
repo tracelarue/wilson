@@ -1,0 +1,10 @@
+<library path="arm_interface">
+    <class name="arm_interface/ArmInterface"
+      type="arm_interface::ArmInterface"
+      base_class_type="hardware_interface::SystemInterface"
+    >
+      <description>
+        Arm Hardware Interface
+      </description>
+    </class>
+  </library>

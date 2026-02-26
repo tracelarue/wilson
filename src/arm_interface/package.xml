@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>arduinobot_controller</name>
+  <name>arm_interface</name>
   <version>0.0.0</version>
-  <description>The arduinobot_controller package</description>
+  <description>Hardware interface package for the arm/gripper ros2_control system</description>
   <maintainer email="antonio.brandi@outlook.it">Antonio Brandi</maintainer>
   <license>Apache 2.0</license>
   <author email="antonio.brandi@outlook.it">Antonio Brandi</author>
