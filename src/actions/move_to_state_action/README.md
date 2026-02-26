@@ -49,7 +49,7 @@ Based on [wilson.srdf](../wilson_moveit_config/config/wilson.srdf):
 
 1. Package is located in your ROS2 workspace:
    ```bash
-   cd ~/wilson/src/move_to_state_action
+   cd ~/wilson/src/actions/move_to_state_action
    ```
 
 2. Build the package:

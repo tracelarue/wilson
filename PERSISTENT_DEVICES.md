@@ -69,7 +69,7 @@ The actual target devices (`ttyUSBX`, `videoX`) may vary, but the symlinks will 
 The following files have been updated to use persistent device names:
 
 ### Launch Files
-- [src/ldlidar_stl_ros/launch/ld19.launch.py](src/ldlidar_stl_ros/launch/ld19.launch.py) - Uses `/dev/wilson/lidar`
+- [src/pubsub/ldlidar_stl_ros/launch/ld19.launch.py](src/pubsub/ldlidar_stl_ros/launch/ld19.launch.py) - Uses `/dev/wilson/lidar`
 - [src/wilson/launch/real/cameras_and_locate.launch.py](src/wilson/launch/real/cameras_and_locate.launch.py) - Uses `/dev/wilson/rgb_camera`
 - [src/wilson/launch/real/robot.launch.py](src/wilson/launch/real/robot.launch.py) - Uses `/dev/wilson/rgb_camera`
 

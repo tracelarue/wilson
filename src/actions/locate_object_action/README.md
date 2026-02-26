@@ -48,7 +48,7 @@ Get your API key from: https://aistudio.google.com/apikey
 1. Clone or copy this package to your ROS2 workspace:
    ```bash
    cd ~/wilson/src
-   # Package should be in: src/locate_object_action/
+   # Package should be in: src/actions/locate_object_action/
    ```
 
 2. Build the package:
