@@ -3,111 +3,125 @@ import yaml
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, TimerAction, ExecuteProcess
-from launch.launch_description_sources import PythonLaunchDescriptionSource, AnyLaunchDescriptionSource
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, LogInfo, RegisterEventHandler, TimerAction
+from launch.event_handlers import OnProcessStart
+from launch.launch_description_sources import AnyLaunchDescriptionSource, PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from moveit_configs_utils import MoveItConfigsBuilder
 
 
-def load_yaml_params(file_path):
-    """Load parameters from YAML file."""
+def _load_global_ros_params(file_path):
     with open(file_path, 'r') as file:
-        return yaml.safe_load(file)
+        data = yaml.safe_load(file) or {}
+
+    try:
+        return data['/**']['ros__parameters']
+    except KeyError as exc:
+        raise RuntimeError(
+            f'Expected global ROS parameters under "/**/ros__parameters" in {file_path}'
+        ) from exc
+
+
+def _workspace_root_from_share(pkg_share_path):
+    return os.path.abspath(os.path.join(pkg_share_path, '..', '..', '..', '..'))
+
+
+def _event_text(event):
+    cmd = event.cmd
+    if isinstance(cmd, (list, tuple)):
+        cmd = ' '.join(str(part) for part in cmd)
+    return f'{event.process_name} {cmd}'
+
+
+def _start_once_on_process_start(stage_state, stage_key, matcher, action, label):
+    def _handler(event, _context):
+        if stage_state.get(stage_key):
+            return None
+        if not matcher(event):
+            return None
+        stage_state[stage_key] = True
+        return [
+            LogInfo(msg=f'[wilson sim] starting {label} after {event.process_name} start'),
+            action,
+        ]
+
+    return _handler
 
 
 def generate_launch_description():
-    # Package configuration
     package_name = 'wilson'
     pkg_path = get_package_share_directory(package_name)
-    
-    # Get workspace root - assumes wilson package is in src/wilson
-    workspace_root = os.path.abspath(os.path.join(pkg_path, '..', '..', '..', '..'))
+    workspace_root = _workspace_root_from_share(pkg_path)
     gemini_mcp_path = os.path.join(workspace_root, 'src', 'gemini_mcp')
-    
-    # Configuration files
+
     sim_params_file = os.path.join(pkg_path, 'config', 'sim_params.yaml')
     nav2_params_file = os.path.join(pkg_path, 'config', 'nav2_params_sim.yaml')
-    
-    # Load simulation parameters
-    sim_params = load_yaml_params(sim_params_file)['/**']['ros__parameters']
-    
-    # Convert boolean parameters to strings for launch arguments
-    use_sim_time = str(sim_params['use_sim_time']).lower()
-    use_ros2_control = str(sim_params['use_ros2_control']).lower()
-    
-    # Other directories
+    sim_params = _load_global_ros_params(sim_params_file)
+
+    default_use_sim_time = str(sim_params.get('use_sim_time', True)).lower()
+    default_use_ros2_control = str(sim_params.get('use_ros2_control', True)).lower()
+    default_use_fake_hardware = str(sim_params.get('use_fake_hardware', False)).lower()
+
     moveit_launch_dir = os.path.join(get_package_share_directory('wilson_moveit_config'), 'launch')
-    
-    # Launch arguments
+
     use_sim_time_config = LaunchConfiguration('use_sim_time')
+    use_ros2_control_config = LaunchConfiguration('use_ros2_control')
+    use_fake_hardware_config = LaunchConfiguration('use_fake_hardware')
     map_config = LaunchConfiguration('map')
     autostart_config = LaunchConfiguration('autostart')
-    
-    # Declare launch arguments
+
     declare_use_sim_time = DeclareLaunchArgument(
         'use_sim_time',
-        default_value=use_sim_time,
+        default_value=default_use_sim_time,
         description='Use simulation time'
     )
-    
+    declare_use_ros2_control = DeclareLaunchArgument(
+        'use_ros2_control',
+        default_value=default_use_ros2_control,
+        description='Enable ros2_control in sim launch'
+    )
+    declare_use_fake_hardware = DeclareLaunchArgument(
+        'use_fake_hardware',
+        default_value=default_use_fake_hardware,
+        description='Use fake hardware interfaces in sim launch'
+    )
     declare_map_yaml = DeclareLaunchArgument(
         'map',
         default_value=os.path.join(pkg_path, 'maps', 'downstairs_sim.yaml'),
         description='Full path to map yaml file'
     )
-    
     declare_autostart = DeclareLaunchArgument(
         'autostart',
         default_value='true',
         description='Automatically startup the nav2 stack'
     )
-    
-    # Initial pose arguments for AMCL localization (from sim_params.yaml)
     declare_initial_pose_x = DeclareLaunchArgument(
         'initial_pose_x',
         default_value=str(sim_params.get('initial_pose_x', 0.0)),
         description='Initial pose X coordinate (from sim_params.yaml)'
     )
-    
     declare_initial_pose_y = DeclareLaunchArgument(
-        'initial_pose_y', 
+        'initial_pose_y',
         default_value=str(sim_params.get('initial_pose_y', 0.0)),
         description='Initial pose Y coordinate (from sim_params.yaml)'
     )
-    
     declare_initial_pose_yaw = DeclareLaunchArgument(
         'initial_pose_yaw',
-        default_value=str(sim_params.get('initial_pose_yaw', 0.0)), 
+        default_value=str(sim_params.get('initial_pose_yaw', 0.0)),
         description='Initial pose yaw angle in radians (from sim_params.yaml)'
     )
-
-    # Core simulation launch
     sim_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             os.path.join(pkg_path, 'launch', 'sim', 'sim.launch.py')
         ]),
         launch_arguments={
             'use_sim_time': use_sim_time_config,
-            'use_ros2_control': use_ros2_control,
-            'params_file': sim_params_file
+            'use_ros2_control': use_ros2_control_config,
+            'use_fake_hardware': use_fake_hardware_config,
+            'params_file': sim_params_file,
         }.items()
     )
 
-    # Navigation2 servers (planning, control, etc.)
-    nav2_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            os.path.join(pkg_path, 'launch', 'base', 'navigation_launch.py')
-        ]),
-        launch_arguments={
-            'use_sim_time': use_sim_time_config,
-            'autostart': autostart_config,
-            'params_file': nav2_params_file,
-            'map_subscribe_transient_local': 'true'
-        }.items()
-    )
-
-    # Localization (map server + AMCL)
     localization_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             os.path.join(pkg_path, 'launch', 'base', 'localization_launch.py')
@@ -116,147 +130,78 @@ def generate_launch_description():
             'use_sim_time': use_sim_time_config,
             'autostart': autostart_config,
             'params_file': nav2_params_file,
-            'map': map_config
+            'map': map_config,
         }.items()
     )
 
-    # MoveIt move_group
-    move_group_launch = IncludeLaunchDescription(
+    nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
-            os.path.join(moveit_launch_dir, 'move_group.launch.py')
+            os.path.join(pkg_path, 'launch', 'base', 'navigation_launch.py')
         ]),
         launch_arguments={
+            'use_sim_time': use_sim_time_config,
+            'autostart': autostart_config,
+            'params_file': nav2_params_file,
+            'map_subscribe_transient_local': 'true',
+        }.items()
+    )
+
+    move_group_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([os.path.join(moveit_launch_dir, 'move_group.launch.py')]),
+        launch_arguments={
             'use_sim': 'true',
+            'use_sim_time': use_sim_time_config,
         }.items(),
     )
 
-    # Load MoveIt configuration (adjust the package name to match your robot's MoveIt config)
-    moveit_config = MoveItConfigsBuilder("wilson", package_name="wilson_moveit_config").to_moveit_configs()
-
-    # Grab Object Action Server Node
-    grab_object_server_node = Node(
-        package="grab_object_action",
-        executable="grab_object_action_server",
-        name="grab_object_action_server",
-        output="screen",
-        parameters=[
-            moveit_config.robot_description,
-            moveit_config.robot_description_semantic,
-            moveit_config.robot_description_kinematics,
-            moveit_config.planning_pipelines,
-            moveit_config.joint_limits,
-        ],
-    )
-
-    # Locate Object Action Server Node
     locate_object_params_file = os.path.join(
         get_package_share_directory('locate_object_action'),
         'config',
-        'locate_object_params_sim.yaml'
+        'locate_object_params_sim.yaml',
+    )
+    action_servers_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            os.path.join(pkg_path, 'launch', 'base', 'action_servers.launch.py')
+        ]),
+        launch_arguments={
+            'use_sim_time': use_sim_time_config,
+            'locate_object_params_file': locate_object_params_file,
+            'mini_fridge_request_timeout_ms': '12000',
+        }.items()
     )
 
-    locate_object_server_node = Node(
-        package="locate_object_action",
-        executable="locate_object_action_server",
-        name="locate_object_action_server",
-        output="screen",
-        parameters=[locate_object_params_file],
-    )
-
-    # Move To State Action Server Node
-    move_to_state_server_node = Node(
-        package="move_to_state_action",
-        executable="move_to_state_action_server",
-        name="move_to_state_action_server",
-        output="screen",
-        parameters=[
-            moveit_config.robot_description,
-            moveit_config.robot_description_semantic,
-            moveit_config.robot_description_kinematics,
-            {'use_sim_time': True},
-        ],
-    )
-
-    # Navigate To Location Action Server Node
-    navigate_to_location_server_node = Node(
-        package="navigate_to_location_action",
-        executable="navigate_to_location_server",
-        name="navigate_to_location_server",
-        output="screen",
-        parameters=[
-            {'use_sim_time': True},
-        ],
-    )
-
-    # Mini Fridge Network Action Server Node
-    mini_fridge_action_server_node = Node(
-        package="network_actions",
-        executable="mini_fridge_action_server",
-        name="mini_fridge_action_server",
-        output="screen",
-        parameters=[
-            {'esp32_host': '192.168.1.112'},
-            {'esp32_port': 80},
-            {'request_path': '/mini_fridge'},
-            {'wait_ms': 5000},
-            {'request_timeout_ms': 12000},
-            {'use_sim_time': True},
-        ],
-    )
-
-    # Timed launches to ensure proper startup sequence
-    nav2_timer = TimerAction(
-        period=3.0,
-        actions=[nav2_launch]
-    )
-    
-    localization_timer = TimerAction(
-        period=5.0,
-        actions=[localization_launch]
-    )
-    
-    move_group_timer = TimerAction(
-        period=8.0,
-        actions=[move_group_launch]
-    )
-
-    # Action servers timer - start after move_group
-    action_servers_timer = TimerAction(
-        period=10.0,
-        actions=[grab_object_server_node, locate_object_server_node, move_to_state_server_node, navigate_to_location_server_node, mini_fridge_action_server_node]
-    )
-
-    # Teleop keyboard in separate terminal
     teleop = ExecuteProcess(
-        cmd=['tilix', '-e', 'ros2', 'run', 'teleop_twist_keyboard', 'teleop_twist_keyboard', '--ros-args', '--remap', 'cmd_vel:=/diff_drive_controller/cmd_vel_unstamped'],
+        cmd=[
+            'tilix',
+            '-e',
+            'ros2',
+            'run',
+            'teleop_twist_keyboard',
+            'teleop_twist_keyboard',
+            '--ros-args',
+            '--remap',
+            'cmd_vel:=/diff_drive_controller/cmd_vel_unstamped',
+        ],
         output='screen',
     )
-    
-    # for use with ros-mcp-server
+
     rosbridge_server = IncludeLaunchDescription(
         AnyLaunchDescriptionSource(
             os.path.join(get_package_share_directory('rosbridge_server'), 'launch', 'rosbridge_websocket_launch.xml')
-        )
-    )
-
-    # Timed optional processes
-    rosbridge_timer = TimerAction(
-        period=1.0,
-        actions=[rosbridge_server]
+        ),
     )
 
     gemini_ros_mcp = ExecuteProcess(
-        cmd=['tilix', '-e', 'bash', '-c', 'python3 gemini.py --responses="AUDIO"; echo "\n\nScript exited. Press Enter to close..."; read'],
+        cmd=[
+            'tilix',
+            '-e',
+            'bash',
+            '-c',
+            'python3 gemini.py --responses="AUDIO"; echo "\\n\\nScript exited. Press Enter to close..."; read',
+        ],
         cwd=gemini_mcp_path,
         output='screen',
     )
-
-    gemini_ros_mcp_timer = TimerAction(
-        period=3.0,
-        actions=[gemini_ros_mcp]
-    )
-
-    # Initial pose publisher - sets 2D pose estimate for AMCL
     initial_pose_publisher = Node(
         package='wilson',
         executable='initial_pose_publisher.py',
@@ -265,39 +210,93 @@ def generate_launch_description():
             {'initial_pose_x': LaunchConfiguration('initial_pose_x')},
             {'initial_pose_y': LaunchConfiguration('initial_pose_y')},
             {'initial_pose_yaw': LaunchConfiguration('initial_pose_yaw')},
-            {'use_sim_time': sim_params['use_sim_time']}
+            {'use_sim_time': use_sim_time_config},
         ],
-        output='screen'
+        output='screen',
     )
-    
-    # Timer for initial pose publisher - start after localization is ready
-    initial_pose_timer = TimerAction(
-        period=15.0,  # Wait for gazebo to be ready
-        actions=[initial_pose_publisher]
+    initial_pose_after_amcl_timer = TimerAction(period=15.0, actions=[initial_pose_publisher])
+
+    startup_sequence_state = {
+        'localization': False,
+        'nav2': False,
+        'move_group': False,
+        'action_servers': False,
+        'initial_pose_timer': False,
+    }
+
+    start_localization = RegisterEventHandler(
+        event_handler=OnProcessStart(
+            on_start=_start_once_on_process_start(
+                startup_sequence_state,
+                'localization',
+                lambda event: 'spawner' in _event_text(event) and 'diff_drive_controller' in _event_text(event),
+                localization_launch,
+                'localization',
+            )
+        )
     )
-    
-    # Launch description
+    start_nav2 = RegisterEventHandler(
+        event_handler=OnProcessStart(
+            on_start=_start_once_on_process_start(
+                startup_sequence_state,
+                'nav2',
+                lambda event: 'lifecycle_manager_localization' in _event_text(event),
+                nav2_launch,
+                'navigation',
+            )
+        )
+    )
+    start_move_group = RegisterEventHandler(
+        event_handler=OnProcessStart(
+            on_start=_start_once_on_process_start(
+                startup_sequence_state,
+                'move_group',
+                lambda event: 'lifecycle_manager_navigation' in _event_text(event),
+                move_group_launch,
+                'move_group',
+            )
+        )
+    )
+    start_action_servers = RegisterEventHandler(
+        event_handler=OnProcessStart(
+            on_start=_start_once_on_process_start(
+                startup_sequence_state,
+                'action_servers',
+                lambda event: 'move_group' in _event_text(event),
+                action_servers_launch,
+                'action servers',
+            )
+        )
+    )
+    start_initial_pose_timer = RegisterEventHandler(
+        event_handler=OnProcessStart(
+            on_start=_start_once_on_process_start(
+                startup_sequence_state,
+                'initial_pose_timer',
+                lambda event: 'amcl' in _event_text(event),
+                initial_pose_after_amcl_timer,
+                'initial pose timer',
+            )
+        )
+    )
+
     return LaunchDescription([
-        # Launch arguments
         declare_use_sim_time,
+        declare_use_ros2_control,
+        declare_use_fake_hardware,
         declare_map_yaml,
         declare_autostart,
         declare_initial_pose_x,
         declare_initial_pose_y,
         declare_initial_pose_yaw,
-
-        # Core simulation
+        start_localization,
+        start_nav2,
+        start_move_group,
+        start_action_servers,
+        start_initial_pose_timer,
         sim_launch,
-
-        # Timed component launches
-        nav2_timer,
-        localization_timer,
-        move_group_timer,
-        action_servers_timer,
-        initial_pose_timer,
-
-        # Optional components
-        #teleop,
-        rosbridge_timer,
-        #gemini_ros_mcp_timer
+        rosbridge_server,
+        # Quick local toggles (comment/uncomment while iterating):
+        teleop,
+        gemini_ros_mcp,
     ])
