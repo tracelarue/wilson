@@ -83,7 +83,7 @@ class MLXLiveGUI:
 
     # ============================================================================
 
-    def __init__(self, root, ros_node, data_queue, history_seconds=5.0):
+    def __init__(self, root, ros_node, data_queue, history_seconds=10.0):
         self.plot_frame = None
         self.root = root
         self.ros_node = ros_node
@@ -890,7 +890,7 @@ def main(args=None):
 
     # Run GUI on main thread
     root = tk.Tk()
-    gui = MLXLiveGUI(root, node, data_queue, history_seconds=15.0)
+    gui = MLXLiveGUI(root, node, data_queue, history_seconds=10.0)
     root.mainloop()
 
     # Cleanup

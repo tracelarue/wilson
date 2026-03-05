@@ -533,9 +533,26 @@ private:
                 grasp->insert(std::move(stage));
             }
 
+            // Short pre-lift
+            {
+                auto stage = std::make_unique<mtc::stages::MoveRelative>("pre-lift object", cartesian_planner);
+                stage->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
+                stage->setMinMaxDistance(0.01, 0.01);
+                stage->setIKFrame(hand_frame);
+                stage->properties().set("marker_ns", "pre_lift_object");
+
+                geometry_msgs::msg::Vector3Stamped vec;
+                vec.header.frame_id = "base_link";
+                vec.vector.z = 1.0;
+                stage->setDirection(vec);
+                grasp->insert(std::move(stage));
+            }
+
             // Lift object while tightening grip
             {
                 auto lift_with_force_grip = std::make_unique<mtc::Merger>("lift with force grip");
+                grasp->properties().exposeTo(lift_with_force_grip->properties(), { "group" });
+                lift_with_force_grip->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
 
                 auto lift_stage = std::make_unique<mtc::stages::MoveRelative>("lift object", cartesian_planner);
                 lift_stage->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
@@ -560,12 +577,12 @@ private:
             task.add(std::move(grasp));
         }
 
-        // Return Home
+        // Go to Ready to grab
         {
-            auto stage = std::make_unique<mtc::stages::MoveTo>("return home", interpolation_planner);
-            stage->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
-            stage->setGoal("ready");
-            task.add(std::move(stage));
+            auto stage_ready_to_grab = std::make_unique<mtc::stages::MoveTo>("Ready to grab", sampling_planner);
+            stage_ready_to_grab->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
+            stage_ready_to_grab->setGoal("ready_to_grab");
+            task.add(std::move(stage_ready_to_grab));
         }
 
         return task;
