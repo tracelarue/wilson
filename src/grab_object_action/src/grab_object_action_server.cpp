@@ -151,11 +151,12 @@ private:
 
             // Create move group interfaces for execution
             moveit::planning_interface::MoveGroupInterface move_group(shared_from_this(), "arm");
+            moveit::planning_interface::MoveGroupInterface arm_gripper_group(shared_from_this(), "arm_gripper");
             moveit::planning_interface::MoveGroupInterface gripper_group(shared_from_this(), "gripper");
 
             // Execute the solution with progress reporting
             double execution_progress = 60.0;  // Starting at 60% (after planning)
-            auto execute_result = executeTaskSolution(*task.solutions().front(), move_group, gripper_group,
+            auto execute_result = executeTaskSolution(*task.solutions().front(), move_group, arm_gripper_group, gripper_group,
                                                       goal_handle, feedback, execution_progress);
             if (execute_result.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS) {
                 RCLCPP_ERROR(LOGGER, "Task execution failed with error code: %d", execute_result.val);
@@ -266,6 +267,7 @@ private:
     moveit::core::MoveItErrorCode executeTaskSolution(
         const mtc::SolutionBase& solution,
         moveit::planning_interface::MoveGroupInterface& move_group,
+        moveit::planning_interface::MoveGroupInterface& arm_gripper_group,
         moveit::planning_interface::MoveGroupInterface& gripper,
         const std::shared_ptr<GoalHandleGrabObject>& goal_handle,
         std::shared_ptr<GrabObject::Feedback>& feedback,
@@ -287,13 +289,17 @@ private:
 
             // Determine which group this trajectory belongs to
             const auto& joint_names = traj->getFirstWayPoint().getVariableNames();
-            bool is_gripper = false;
+            bool has_gripper_joint = false;
+            bool has_non_gripper_joint = false;
             for (const auto& name : joint_names) {
                 if (name.find("gripper") != std::string::npos) {
-                    is_gripper = true;
-                    break;
+                    has_gripper_joint = true;
+                } else {
+                    has_non_gripper_joint = true;
                 }
             }
+            const bool is_mixed_arm_gripper = has_gripper_joint && has_non_gripper_joint;
+            const bool is_gripper_only = has_gripper_joint && !has_non_gripper_joint;
 
             // Update progress based on stage name
             if (stage_name.find("transition to grab") != std::string::npos) {
@@ -311,13 +317,16 @@ private:
             } else if (stage_name.find("close hand") != std::string::npos) {
                 progress_percentage = 85.0;
                 feedback->current_stage = "Closing gripper on object";
+            } else if (stage_name.find("force grip") != std::string::npos) {
+                progress_percentage = 88.0;
+                feedback->current_stage = "Tightening grip while lifting";
             } else if (stage_name.find("lift") != std::string::npos) {
                 progress_percentage = 90.0;
                 feedback->current_stage = "Lifting object";
             } else if (stage_name.find("return") != std::string::npos || stage_name.find("home") != std::string::npos) {
                 progress_percentage = 95.0;
                 feedback->current_stage = "Returning to home position";
-            } else if (is_gripper) {
+            } else if (is_gripper_only) {
                 // Generic gripper operation
                 progress_percentage = std::min(progress_percentage + 3.0, 95.0);
                 feedback->current_stage = "Operating gripper";
@@ -337,7 +346,10 @@ private:
             non_const_traj.getRobotTrajectoryMsg(plan.trajectory_);
 
             moveit::core::MoveItErrorCode result;
-            if (is_gripper) {
+            if (is_mixed_arm_gripper) {
+                RCLCPP_INFO(LOGGER, "Executing combined arm+gripper trajectory");
+                result = arm_gripper_group.execute(plan);
+            } else if (is_gripper_only) {
                 RCLCPP_INFO(LOGGER, "Executing gripper trajectory");
                 result = gripper.execute(plan);
             } else {
@@ -354,7 +366,7 @@ private:
         else if (const auto* sequence = dynamic_cast<const mtc::SolutionSequence*>(&solution)) {
             // Recursively execute all sub-solutions in order
             for (const auto* sub_solution : sequence->solutions()) {
-                auto result = executeTaskSolution(*sub_solution, move_group, gripper,
+                auto result = executeTaskSolution(*sub_solution, move_group, arm_gripper_group, gripper,
                                                  goal_handle, feedback, progress_percentage);
                 if (result.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS) {
                     return result;
@@ -363,7 +375,7 @@ private:
         }
         // Check if this is a WrappedSolution
         else if (const auto* wrapped = dynamic_cast<const mtc::WrappedSolution*>(&solution)) {
-            return executeTaskSolution(*wrapped->wrapped(), move_group, gripper,
+            return executeTaskSolution(*wrapped->wrapped(), move_group, arm_gripper_group, gripper,
                                       goal_handle, feedback, progress_percentage);
         }
 
@@ -521,20 +533,28 @@ private:
                 grasp->insert(std::move(stage));
             }
 
-            // Lift object
+            // Lift object while tightening grip
             {
-                auto stage = std::make_unique<mtc::stages::MoveRelative>("lift object", cartesian_planner);
-                stage->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
-                stage->setMinMaxDistance(0.0, 0.1);
-                stage->setIKFrame(hand_frame);
-                stage->properties().set("marker_ns", "lift_object");
+                auto lift_with_force_grip = std::make_unique<mtc::Merger>("lift with force grip");
 
-                // Set upward direction
+                auto lift_stage = std::make_unique<mtc::stages::MoveRelative>("lift object", cartesian_planner);
+                lift_stage->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
+                lift_stage->setMinMaxDistance(0.0, 0.1);
+                lift_stage->setIKFrame(hand_frame);
+                lift_stage->properties().set("marker_ns", "lift_object");
+
                 geometry_msgs::msg::Vector3Stamped vec;
                 vec.header.frame_id = "base_link";
                 vec.vector.z = 1.0;
-                stage->setDirection(vec);
-                grasp->insert(std::move(stage));
+                lift_stage->setDirection(vec);
+
+                auto force_grip_stage = std::make_unique<mtc::stages::MoveTo>("force grip while lifting", interpolation_planner);
+                force_grip_stage->setGroup(hand_group_name);
+                force_grip_stage->setGoal("force_grip");
+
+                lift_with_force_grip->add(std::move(lift_stage));
+                lift_with_force_grip->add(std::move(force_grip_stage));
+                grasp->insert(std::move(lift_with_force_grip));
             }
 
             task.add(std::move(grasp));
