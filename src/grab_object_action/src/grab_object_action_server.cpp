@@ -579,9 +579,9 @@ private:
 
         // Go to Ready to grab
         {
-            auto stage_ready_to_grab = std::make_unique<mtc::stages::MoveTo>("Ready to grab", sampling_planner);
+            auto stage_ready_to_grab = std::make_unique<mtc::stages::MoveTo>("Grab to lift", sampling_planner);
             stage_ready_to_grab->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
-            stage_ready_to_grab->setGoal("ready_to_grab");
+            stage_ready_to_grab->setGoal("grab_to_lift");
             task.add(std::move(stage_ready_to_grab));
         }
 
