@@ -7,12 +7,16 @@
 #include <rclcpp_lifecycle/state.hpp>
 #include <rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp>
 #include <sensor_msgs/msg/magnetic_field.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <rclcpp/publisher.hpp>
+#include <rclcpp/subscription.hpp>
 
 #include <vector>
 #include <string>
 #include <thread>
 #include <memory>
+#include <atomic>
+#include <cstdint>
 
 
 namespace arduinobot_controller
@@ -48,9 +52,13 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<sensor_msgs::msg::MagneticField>::SharedPtr mlx_publisher_;
   rclcpp::Publisher<sensor_msgs::msg::MagneticField>::SharedPtr mlx_ambient_publisher_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr pickup_command_subscription_;
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
   std::thread executor_thread_;
   bool executor_running_ = false;
+  std::atomic<bool> pickup_requested_{false};
+  std::atomic<uint64_t> pickup_lockout_until_ms_{0};
+  static constexpr uint64_t pickup_lockout_duration_ms_ = 7000;
 
   // MLX sensor readings
   double mlx_x_;
@@ -62,6 +70,8 @@ private:
 
   // Helper method
   bool parseMLXData(const std::string& line);
+  bool sendSerialMessage(const std::string& msg);
+  void pickupCommandCallback(const std_msgs::msg::String::SharedPtr msg);
 };
 }  // namespace arduinobot_controller
 

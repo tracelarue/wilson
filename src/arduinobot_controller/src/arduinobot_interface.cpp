@@ -5,10 +5,33 @@
 #include <chrono>
 #include <sstream>
 #include <vector>
+#include <algorithm>
+#include <cctype>
+#include <functional>
+#include <cmath>
 
 
 namespace arduinobot_controller
 {
+
+namespace
+{
+
+uint64_t monotonicMs()
+{
+  return static_cast<uint64_t>(
+    std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count());
+}
+
+std::string lowercaseCopy(std::string input)
+{
+  std::transform(input.begin(), input.end(), input.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return input;
+}
+
+}  // namespace
 
 std::string compensateZeros(const int value)
 {
@@ -106,6 +129,10 @@ CallbackReturn ArduinobotInterface::on_init(const hardware_interface::HardwareIn
         "/mlx", 10);
     mlx_ambient_publisher_ = node_->create_publisher<sensor_msgs::msg::MagneticField>(
         "/mlx_ambient", 10);
+    pickup_command_subscription_ = node_->create_subscription<std_msgs::msg::String>(
+        "/manual_arm_control/command",
+        10,
+        std::bind(&ArduinobotInterface::pickupCommandCallback, this, std::placeholders::_1));
 
     // Create executor and start spinning thread
     executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
@@ -120,7 +147,7 @@ CallbackReturn ArduinobotInterface::on_init(const hardware_interface::HardwareIn
     });
 
     RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"),
-                "MLX sensor publishers initialized on topics /mlx and /mlx_ambient");
+                "MLX publishers ready on /mlx + /mlx_ambient; pickup command subscription on /manual_arm_control/command");
   }
   catch (const std::exception& e)
   {
@@ -279,6 +306,23 @@ hardware_interface::return_type ArduinobotInterface::read(const rclcpp::Time &ti
 hardware_interface::return_type ArduinobotInterface::write(const rclcpp::Time &time,
                                                            const rclcpp::Duration &period)
 {
+  // Dispatch one-shot pickup command before joint streaming.
+  if (pickup_requested_.exchange(false))
+  {
+    pickup_lockout_until_ms_.store(monotonicMs() + pickup_lockout_duration_ms_);
+    if (!sendSerialMessage("p001,"))
+    {
+      return hardware_interface::return_type::ERROR;
+    }
+    return hardware_interface::return_type::OK;
+  }
+
+  // Hold off direct joint commands while Arduino runs pickup sequence.
+  if (monotonicMs() < pickup_lockout_until_ms_.load())
+  {
+    return hardware_interface::return_type::OK;
+  }
+
   if (position_commands_ == prev_position_commands_)
   {
     // Nothing changed, do not send any command
@@ -321,16 +365,8 @@ hardware_interface::return_type ArduinobotInterface::write(const rclcpp::Time &t
   msg.append(std::to_string(gripper));
   msg.append(",");
 
-  try
+  if (!sendSerialMessage(msg))
   {
-    RCLCPP_INFO_STREAM(rclcpp::get_logger("ArduinobotInterface"), "Sending new command " << msg);
-    arduino_.Write(msg);
-  }
-  catch (...)
-  {
-    RCLCPP_ERROR_STREAM(rclcpp::get_logger("ArduinobotInterface"),
-                        "Something went wrong while sending the message "
-                            << msg << " to the port " << port_);
     return hardware_interface::return_type::ERROR;
   }
 
@@ -384,6 +420,47 @@ bool ArduinobotInterface::parseMLXData(const std::string& line)
   }
 
   return false; // Not MLX data (could be position response with 5 values)
+}
+
+bool ArduinobotInterface::sendSerialMessage(const std::string& msg)
+{
+  if (!arduino_.IsOpen())
+  {
+    RCLCPP_ERROR(rclcpp::get_logger("ArduinobotInterface"),
+                 "Serial port is not open; cannot send command");
+    return false;
+  }
+
+  try
+  {
+    RCLCPP_INFO_STREAM(rclcpp::get_logger("ArduinobotInterface"), "Sending command " << msg);
+    arduino_.Write(msg);
+    return true;
+  }
+  catch (...)
+  {
+    RCLCPP_ERROR_STREAM(rclcpp::get_logger("ArduinobotInterface"),
+                        "Something went wrong while sending the message "
+                            << msg << " to the port " << port_);
+    return false;
+  }
+}
+
+void ArduinobotInterface::pickupCommandCallback(const std_msgs::msg::String::SharedPtr msg)
+{
+  if (!msg)
+  {
+    return;
+  }
+
+  const std::string command = lowercaseCopy(msg->data);
+  if (command == "pickup")
+  {
+    pickup_requested_.store(true);
+    pickup_lockout_until_ms_.store(monotonicMs() + pickup_lockout_duration_ms_);
+    RCLCPP_INFO(rclcpp::get_logger("ArduinobotInterface"),
+                "Received pickup request; dispatching p001 to Arduino");
+  }
 }
 }  // namespace arduinobot_controller
 

@@ -13,6 +13,7 @@ TO EDIT FORCE CALCULATION FORMULAS:
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import MagneticField
+from std_msgs.msg import String
 
 import tkinter as tk
 from tkinter import ttk
@@ -299,6 +300,12 @@ class MLXLiveGUI:
         )
         self.force_mode_btn.grid(row=0, column=3, sticky="e", padx=(5, 5))
 
+        self.pickup_btn = ttk.Button(
+            bottom, text="Pickup", command=self.send_pickup_command,
+            style="Accent.TButton"
+        )
+        self.pickup_btn.grid(row=0, column=4, sticky="e", padx=(10, 0))
+
         # Capture controls (row 1)
         capture_lbl = ttk.Label(bottom, text="Capture:", style="Inline.TLabel")
         capture_lbl.grid(row=1, column=0, sticky="w", padx=(0, 5), pady=(5, 0))
@@ -456,6 +463,12 @@ class MLXLiveGUI:
             )
             self.status_var.set("Status: Tared (Dual)")
             self.root.after(1000, self._update_stream_status)
+
+    def send_pickup_command(self):
+        """Send a one-shot pickup request to manual arm control."""
+        self.ros_node.send_pickup_command()
+        self.status_var.set("Status: Pickup requested")
+        self.root.after(1200, self._update_stream_status)
 
     @staticmethod
     def _trailing_mean(values, window):
@@ -819,8 +832,19 @@ class MLXGuiNode(Node):
             self.mlx_ambient_callback,
             10
         )
+        self.pickup_command_publisher = self.create_publisher(
+            String,
+            '/manual_arm_control/command',
+            10
+        )
 
         self.get_logger().info("MLX GUI Node started, subscribing to /mlx and /mlx_ambient")
+
+    def send_pickup_command(self):
+        msg = String()
+        msg.data = 'pickup'
+        self.pickup_command_publisher.publish(msg)
+        self.get_logger().info("Published pickup command to /manual_arm_control/command")
 
     def mlx_ambient_callback(self, msg):
         """Callback for /mlx_ambient topic - cache latest ambient baseline sample."""
