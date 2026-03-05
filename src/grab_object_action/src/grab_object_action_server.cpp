@@ -10,11 +10,14 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_eigen/tf2_eigen.hpp>
+#include <algorithm>
+#include <cstdint>
 
 #include "grab_object_action/action/grab_object.hpp"
 
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("grab_object_action_server");
 namespace mtc = moveit::task_constructor;
+static constexpr double kLiftForceGripSpeedScale = 0.7;
 
 class GrabObjectActionServer : public rclcpp::Node {
 public:
@@ -263,6 +266,28 @@ private:
         return approach_vec;
     }
 
+    void scaleTrajectorySpeed(moveit_msgs::msg::RobotTrajectory& trajectory, double speed_scale)
+    {
+        if (speed_scale <= 0.0 || std::abs(speed_scale - 1.0) < 1e-6) {
+            return;
+        }
+
+        const double time_scale = 1.0 / speed_scale;
+        for (auto& point : trajectory.joint_trajectory.points) {
+            const int64_t original_ns = rclcpp::Duration(point.time_from_start).nanoseconds();
+            const int64_t scaled_ns = std::max<int64_t>(
+                1, static_cast<int64_t>(static_cast<double>(original_ns) * time_scale));
+            point.time_from_start = rclcpp::Duration::from_nanoseconds(scaled_ns);
+
+            for (auto& velocity : point.velocities) {
+                velocity *= speed_scale;
+            }
+            for (auto& acceleration : point.accelerations) {
+                acceleration *= speed_scale * speed_scale;
+            }
+        }
+    }
+
     // Helper function to recursively extract and execute all trajectories from a solution
     moveit::core::MoveItErrorCode executeTaskSolution(
         const mtc::SolutionBase& solution,
@@ -286,6 +311,9 @@ private:
             if (stage_info) {
                 stage_name = stage_info->name();
             }
+            const bool is_lift_force_grip_stage =
+                stage_name.find("lift with force grip") != std::string::npos ||
+                stage_name.find("force grip while lifting") != std::string::npos;
 
             // Determine which group this trajectory belongs to
             const auto& joint_names = traj->getFirstWayPoint().getVariableNames();
@@ -344,6 +372,10 @@ private:
             moveit::planning_interface::MoveGroupInterface::Plan plan;
             robot_trajectory::RobotTrajectory non_const_traj(*traj);  // Create non-const copy
             non_const_traj.getRobotTrajectoryMsg(plan.trajectory_);
+            if (is_lift_force_grip_stage) {
+                RCLCPP_INFO(LOGGER, "Applying lift+grip speed scale %.2f", kLiftForceGripSpeedScale);
+                scaleTrajectorySpeed(plan.trajectory_, kLiftForceGripSpeedScale);
+            }
 
             moveit::core::MoveItErrorCode result;
             if (is_mixed_arm_gripper) {
@@ -537,7 +569,7 @@ private:
             {
                 auto stage = std::make_unique<mtc::stages::MoveRelative>("pre-lift object", cartesian_planner);
                 stage->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
-                stage->setMinMaxDistance(0.01, 0.01);
+                stage->setMinMaxDistance(0.03, 0.03);
                 stage->setIKFrame(hand_frame);
                 stage->properties().set("marker_ns", "pre_lift_object");
 
