@@ -23,6 +23,8 @@ Servo baseServo, shoulderServo, elbowServo, wristServo, gripperServo;
 
 #define ELBOW_OFFSET_DEG 8
 #define WRIST_OFFSET_DEG 5
+#define MAX_STEP_SPEED_DEG_PER_SEC 45
+#define MOTION_UPDATE_INTERVAL_MS 20
 
 // Serial buffer
 String inputBuffer = "";
@@ -108,12 +110,23 @@ PickupStep pickupSequence[] = {
 const uint8_t pickupStepCount = sizeof(pickupSequence) / sizeof(pickupSequence[0]);
 bool pickupActive = false;
 uint8_t pickupIndex = 0;
-unsigned long pickupStepStartMs = 0;
+unsigned long pickupHoldStartMs = 0;
+bool pickupHolding = false;
+
+// Synchronized motion state (all joints reach target at the same time)
+bool motionActive = false;
+unsigned long motionStartMs = 0;
+unsigned long motionDurationMs = 0;
+unsigned long lastMotionUpdateMs = 0;
+int motionStartBase = 0, motionStartShoulder = 0, motionStartElbow = 0, motionStartWrist = 0, motionStartGripper = 0;
+int motionTargetBase = 0, motionTargetShoulder = 0, motionTargetElbow = 0, motionTargetWrist = 0, motionTargetGripper = 0;
 
 void setServoPulseFromUserAngle(Servo &servo, int userAngle, int offsetDeg = 0);
 void attachServosIfNeeded();
 void applyPose(int base, int shoulder, int elbow, int wrist, int gripper);
 void startPickupSequence();
+void startSynchronizedMove(int base, int shoulder, int elbow, int wrist, int gripper, unsigned long nowMs);
+void updateSynchronizedMove(unsigned long nowMs);
 void updatePickupSequence(unsigned long nowMs);
 void processCommand(String command);
 void sendCurrentPositions();
@@ -169,11 +182,12 @@ void loop() {
 
   unsigned long currentMillis = millis();
 
-  // Keep sequence non-blocking
+  // Keep sequence and synchronized movement non-blocking
+  updateSynchronizedMove(currentMillis);
   updatePickupSequence(currentMillis);
 
   // Detach servos on idle to reduce jitter
-  if (!pickupActive && servosAttached && (currentMillis - lastCmdMs > SERVO_IDLE_TIMEOUT_MS)) {
+  if (!pickupActive && !motionActive && servosAttached && (currentMillis - lastCmdMs > SERVO_IDLE_TIMEOUT_MS)) {
     baseServo.detach();
     shoulderServo.detach();
     elbowServo.detach();
@@ -273,6 +287,7 @@ void processCommand(String command) {
 
   // Manual joint commands cancel any running sequence
   pickupActive = false;
+  motionActive = false;
   attachServosIfNeeded();
   lastCmdMs = millis();
 
@@ -347,15 +362,103 @@ void startPickupSequence() {
   attachServosIfNeeded();
   pickupActive = true;
   pickupIndex = 0;
-  pickupStepStartMs = millis();
-  lastCmdMs = pickupStepStartMs;
-  applyPose(
+  pickupHolding = false;
+  const unsigned long nowMs = millis();
+  lastCmdMs = nowMs;
+  startSynchronizedMove(
     pickupSequence[pickupIndex].base,
     pickupSequence[pickupIndex].shoulder,
     pickupSequence[pickupIndex].elbow,
     pickupSequence[pickupIndex].wrist,
-    pickupSequence[pickupIndex].gripper
+    pickupSequence[pickupIndex].gripper,
+    nowMs
   );
+}
+
+int interpolateAngle(int startAngle, int targetAngle, unsigned long elapsedMs, unsigned long durationMs) {
+  if (durationMs == 0 || elapsedMs >= durationMs) {
+    return targetAngle;
+  }
+
+  const long delta = static_cast<long>(targetAngle) - static_cast<long>(startAngle);
+  const long denom = static_cast<long>(durationMs);
+  const long numer = static_cast<long>(elapsedMs);
+
+  // Rounded integer interpolation
+  const long rounding = (delta >= 0) ? (denom / 2) : -(denom / 2);
+  const long scaled = (delta * numer + rounding) / denom;
+  return static_cast<int>(static_cast<long>(startAngle) + scaled);
+}
+
+void startSynchronizedMove(int base, int shoulder, int elbow, int wrist, int gripper, unsigned long nowMs) {
+  motionStartBase = currentBase;
+  motionStartShoulder = currentShoulder;
+  motionStartElbow = currentElbow;
+  motionStartWrist = currentWrist;
+  motionStartGripper = currentGripper;
+
+  motionTargetBase = constrain(base, 0, MAX_USER_ANGLE);
+  motionTargetShoulder = constrain(shoulder, 0, MAX_USER_ANGLE);
+  motionTargetElbow = constrain(elbow, 0, MAX_USER_ANGLE);
+  motionTargetWrist = constrain(wrist, 0, MAX_USER_ANGLE);
+  motionTargetGripper = constrain(gripper, 0, MAX_USER_ANGLE);
+
+  const int dBase = abs(motionTargetBase - motionStartBase);
+  const int dShoulder = abs(motionTargetShoulder - motionStartShoulder);
+  const int dElbow = abs(motionTargetElbow - motionStartElbow);
+  const int dWrist = abs(motionTargetWrist - motionStartWrist);
+  const int dGripper = abs(motionTargetGripper - motionStartGripper);
+
+  int maxDelta = dBase;
+  if (dShoulder > maxDelta) maxDelta = dShoulder;
+  if (dElbow > maxDelta) maxDelta = dElbow;
+  if (dWrist > maxDelta) maxDelta = dWrist;
+  if (dGripper > maxDelta) maxDelta = dGripper;
+
+  if (maxDelta == 0) {
+    motionActive = false;
+    motionDurationMs = 0;
+    applyPose(motionTargetBase, motionTargetShoulder, motionTargetElbow, motionTargetWrist, motionTargetGripper);
+    return;
+  }
+
+  motionDurationMs =
+    (static_cast<unsigned long>(maxDelta) * 1000UL + MAX_STEP_SPEED_DEG_PER_SEC - 1) / MAX_STEP_SPEED_DEG_PER_SEC;
+
+  if (motionDurationMs < MOTION_UPDATE_INTERVAL_MS) {
+    motionDurationMs = MOTION_UPDATE_INTERVAL_MS;
+  }
+
+  motionStartMs = nowMs;
+  lastMotionUpdateMs = 0;
+  motionActive = true;
+}
+
+void updateSynchronizedMove(unsigned long nowMs) {
+  if (!motionActive) {
+    return;
+  }
+
+  const unsigned long elapsed = nowMs - motionStartMs;
+  if (elapsed < motionDurationMs && (nowMs - lastMotionUpdateMs) < MOTION_UPDATE_INTERVAL_MS) {
+    return;
+  }
+  lastMotionUpdateMs = nowMs;
+
+  const int nextBase = interpolateAngle(motionStartBase, motionTargetBase, elapsed, motionDurationMs);
+  const int nextShoulder = interpolateAngle(motionStartShoulder, motionTargetShoulder, elapsed, motionDurationMs);
+  const int nextElbow = interpolateAngle(motionStartElbow, motionTargetElbow, elapsed, motionDurationMs);
+  const int nextWrist = interpolateAngle(motionStartWrist, motionTargetWrist, elapsed, motionDurationMs);
+  const int nextGripper = interpolateAngle(motionStartGripper, motionTargetGripper, elapsed, motionDurationMs);
+
+  applyPose(nextBase, nextShoulder, nextElbow, nextWrist, nextGripper);
+  lastCmdMs = nowMs;
+
+  if (elapsed >= motionDurationMs) {
+    motionActive = false;
+    // Ensure exact final target on completion.
+    applyPose(motionTargetBase, motionTargetShoulder, motionTargetElbow, motionTargetWrist, motionTargetGripper);
+  }
 }
 
 void updatePickupSequence(unsigned long nowMs) {
@@ -365,28 +468,41 @@ void updatePickupSequence(unsigned long nowMs) {
 
   if (pickupIndex >= pickupStepCount) {
     pickupActive = false;
+    pickupHolding = false;
     return;
   }
 
-  if (nowMs - pickupStepStartMs < pickupSequence[pickupIndex].holdMs) {
+  if (motionActive) {
+    return;
+  }
+
+  if (!pickupHolding) {
+    pickupHoldStartMs = nowMs;
+    pickupHolding = true;
+    return;
+  }
+
+  if (nowMs - pickupHoldStartMs < pickupSequence[pickupIndex].holdMs) {
     return;
   }
 
   pickupIndex++;
   if (pickupIndex >= pickupStepCount) {
     pickupActive = false;
+    pickupHolding = false;
     lastCmdMs = nowMs;
     return;
   }
 
-  applyPose(
+  pickupHolding = false;
+  startSynchronizedMove(
     pickupSequence[pickupIndex].base,
     pickupSequence[pickupIndex].shoulder,
     pickupSequence[pickupIndex].elbow,
     pickupSequence[pickupIndex].wrist,
-    pickupSequence[pickupIndex].gripper
+    pickupSequence[pickupIndex].gripper,
+    nowMs
   );
-  pickupStepStartMs = nowMs;
   lastCmdMs = nowMs;
 }
 
