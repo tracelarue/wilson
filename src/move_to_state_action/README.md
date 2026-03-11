@@ -80,7 +80,7 @@ ros2 launch move_to_state_action move_to_state_server.launch.py use_sim_time:=tr
 ```bash
 # Move arm to ready position
 ros2 action send_goal /move_to_state move_to_state_action/action/MoveToState \
-  "{statename: 'ready'}" --feedback
+  "{statename: 'idle'}" --feedback
 
 # Move arm to zero position
 ros2 action send_goal /move_to_state move_to_state_action/action/MoveToState \

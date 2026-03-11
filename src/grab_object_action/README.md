@@ -57,8 +57,8 @@ ros2 launch grab_object_action grab_object_server.launch.py
 # Basic example - grab objectat x=0, y=0.1, z=0.65 in depth_camera_link_optical frame
 ros2 action send_goal /grab_object grab_object_action/action/GrabObject "{
   targetx: 0.0,
-  targety: 0.09,
-  targetz: 0.65
+  targety: 0.06,
+  targetz: 0.375
 }" --feedback
 ```
 

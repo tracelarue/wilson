@@ -29,6 +29,67 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 
+# ============================================================================
+# GUI CONFIGURATION - EDIT THESE VALUES TO TUNE THE DISPLAY
+# ============================================================================
+GUI_CONFIG = {
+    "window_title": "MLX Magnetometer - Live View",
+    "window_geometry": "1000x1500",
+    "header_title": "MLX90393 Magnetometer Live Viewer",
+    "status_streaming_text": "Status: Streaming",
+    "status_tared_text": "Status: Tared (Dual)",
+    "status_ambient_stale_suffix": " (Ambient Stale)",
+    "status_capturing_suffix": " (Capturing)",
+    "sample_rate_prefix": "Sample rate:",
+    "sample_rate_placeholder": "-",
+    "tare_button_text": "Tare",
+    "plot_mode_button_comp_text": "Plot: Comp",
+    "plot_mode_button_force_text": "Plot: Force",
+    "plot_mode_button_ambient_text": "Plot: Ambient",
+    "force_mode_button_comp_text": "Force: Comp",
+    "force_mode_button_raw_text": "Force: Raw",
+    "capture_label_text": "Capture:",
+    "capture_start_text": "Start",
+    "capture_stop_text": "Stop",
+    "capture_cancel_text": "Cancel",
+    "quit_button_text": "Quit",
+    "magnetic_plot_title": "Magnetic Fields",
+    "force_plot_title": "Forces",
+    "force_raw_plot_title": "Force Sensor Tared Magnetic Field",
+    "ambient_plot_title": "Ambient Sensor Tared Magnetic Field",
+    "magnetic_axis_label": "Magnetic Field (uT)",
+    "force_axis_label": "Force (N)",
+    "time_axis_label": "Time (s)",
+    "overlay_x_label": "X",
+    "overlay_y_label": "Y",
+    "overlay_z_label": "Z",
+    "overlay_grip_label": "Grip Force",
+    "overlay_downforce_label": "Downforce",
+    "history_seconds": 10.0,
+    "update_interval_ms": 50,
+    "smoothing_window_samples": 40,
+    "tare_window_samples": 20,
+    "ambient_stale_timeout_s": 0.5,
+    "figure_size": (10, 8),
+    "figure_dpi": 100,
+    "figure_right_margin": 0.95,
+    "overlay_font_size": 18,
+    "plot_title_font_size": 20,
+    "axis_label_font_size": 20,
+    "axis_tick_font_size": 18,
+    "legend_font_size": 18,
+    "font_family": "Segoe UI",
+    "mono_font_family": "Consolas",
+    "title_font_size": 20,
+    "section_font_size": 20,
+    "status_font_size": 14,
+    "value_font_size": 40,
+    "inline_font_size": 14,
+    "button_font_size": 12,
+    "button_padding": (10, 5),
+}
+
+
 class MLXLiveGUI:
     """Tkinter GUI for live visualization of compensated MLX90393 magnetometer data."""
 
@@ -77,21 +138,22 @@ class MLXLiveGUI:
         EDIT THIS FORMULA as needed for your calibration.
         """
         # Simple linear formula for downforce
-        downforce = x / 40
+        downforce = x / 42.33
         return abs(downforce)
 
     # ============================================================================
 
-    def __init__(self, root, ros_node, data_queue, history_seconds=5.0):
+    def __init__(self, root, ros_node, data_queue, config):
         self.plot_frame = None
         self.root = root
         self.ros_node = ros_node
         self.data_queue = data_queue
-        self.root.title("MLX Magnetometer – Live View")
+        self.config = config
+        self.root.title(self.config["window_title"])
 
         # Basic window sizing
-        self.root.geometry("1100x650")
-        self.history_seconds = history_seconds
+        self.root.geometry(self.config["window_geometry"])
+        self.history_seconds = self.config["history_seconds"]
 
         # Data buffers (compensated delta used for plotting and force formulas)
         self.times = deque()
@@ -136,8 +198,8 @@ class MLXLiveGUI:
         self.max_y_raw = 10
 
         # Simple Moving Average (SMA) smoothing applied to plotted lines
-        self.smoothing_window_samples = 40
-        self.tare_window_samples = 20
+        self.smoothing_window_samples = self.config["smoothing_window_samples"]
+        self.tare_window_samples = self.config["tare_window_samples"]
 
         # Force calculation buffers
         self.grip_force = deque()
@@ -160,9 +222,9 @@ class MLXLiveGUI:
         self.capture_active = False
         self.capture_buffer = []
         self.top_plot_mode = "compensated"
-        self.top_plot_mode_var = tk.StringVar(value="Plot: Comp")
+        self.top_plot_mode_var = tk.StringVar(value=self.config["plot_mode_button_comp_text"])
         self.force_plot_mode = "compensated"
-        self.force_plot_mode_var = tk.StringVar(value="Force: Comp")
+        self.force_plot_mode_var = tk.StringVar(value=self.config["force_mode_button_comp_text"])
 
         # Styling
         self._init_style()
@@ -193,26 +255,26 @@ class MLXLiveGUI:
         style.configure("Card.TFrame", background="white", relief="groove", borderwidth=1)
 
         # Labels
-        style.configure("Title.TLabel", font=("Segoe UI", 18, "bold"),
+        style.configure("Title.TLabel", font=(self.config["font_family"], self.config["title_font_size"], "bold"),
                         background=bg, foreground=accent)
-        style.configure("Section.TLabel", font=("Segoe UI", 12, "bold"),
+        style.configure("Section.TLabel", font=(self.config["font_family"], self.config["section_font_size"], "bold"),
                         background=bg, foreground=accent)
-        style.configure("Status.TLabel", font=("Segoe UI", 10),
+        style.configure("Status.TLabel", font=(self.config["font_family"], self.config["status_font_size"]),
                         background=bg, foreground="#333333")
-        style.configure("Value.TLabel", font=("Consolas", 16, "bold"),
+        style.configure("Value.TLabel", font=(self.config["mono_font_family"], self.config["value_font_size"], "bold"),
                         background=bg, foreground="#111111")
 
         # Inline labels
-        style.configure("Inline.TLabel", font=("Segoe UI", 10),
+        style.configure("Inline.TLabel", font=(self.config["font_family"], self.config["inline_font_size"]),
                         background=bg, foreground="#444444")
 
         # Buttons
         style.configure(
             "Accent.TButton",
-            font=("Segoe UI", 10, "bold"),
+            font=(self.config["font_family"], self.config["button_font_size"], "bold"),
             foreground="white",
             background=accent,
-            padding=(8, 3),
+            padding=self.config["button_padding"],
         )
         style.map(
             "Accent.TButton",
@@ -221,10 +283,10 @@ class MLXLiveGUI:
 
         style.configure(
             "Secondary.TButton",
-            font=("Segoe UI", 10),
+            font=(self.config["font_family"], self.config["button_font_size"]),
             foreground="#222222",
             background="white",
-            padding=(8, 3),
+            padding=self.config["button_padding"],
             borderwidth=1,
             relief="solid",
         )
@@ -246,19 +308,12 @@ class MLXLiveGUI:
         top.columnconfigure(0, weight=1)
         top.columnconfigure(1, weight=0)
 
-        title_lbl = ttk.Label(top, text="MLX90393 Magnetometer Live Viewer", style="Title.TLabel")
+        title_lbl = ttk.Label(top, text=self.config["header_title"], style="Title.TLabel")
         title_lbl.grid(row=0, column=0, sticky="w")
 
-        subtitle = ttk.Label(
-            top,
-            text="ROS2 /mlx + /mlx_ambient • compensated delta",
-            style="Status.TLabel"
-        )
-        subtitle.grid(row=1, column=0, sticky="w", pady=(2, 0))
-
-        self.status_var = tk.StringVar(value="Status: Streaming")
+        self.status_var = tk.StringVar(value=self.config["status_streaming_text"])
         self.status_lbl = ttk.Label(top, textvariable=self.status_var, style="Status.TLabel")
-        self.status_lbl.grid(row=1, column=1, sticky="e", padx=(10, 0))
+        self.status_lbl.grid(row=0, column=1, sticky="e", padx=(10, 0))
 
         # ---- Middle: Plot ----
         mid = ttk.Frame(self.root, padding=(10, 5, 10, 5), style="Main.TFrame")
@@ -278,12 +333,12 @@ class MLXLiveGUI:
             bottom.columnconfigure(c, weight=0)
 
         # Sample rate display
-        self.sample_rate_var = tk.StringVar(value="–")
+        self.sample_rate_var = tk.StringVar(value=self.config["sample_rate_placeholder"])
         status_lbl = ttk.Label(bottom, textvariable=self.sample_rate_var, style="Status.TLabel")
         status_lbl.grid(row=0, column=0, sticky="w")
 
         # Tare button
-        self.tare_btn = ttk.Button(bottom, text="Tare", command=self.tare_stream,
+        self.tare_btn = ttk.Button(bottom, text=self.config["tare_button_text"], command=self.tare_stream,
                                    style="Secondary.TButton")
         self.tare_btn.grid(row=0, column=1, sticky="e", padx=(5, 5))
 
@@ -300,29 +355,29 @@ class MLXLiveGUI:
         self.force_mode_btn.grid(row=0, column=3, sticky="e", padx=(5, 5))
 
         # Capture controls (row 1)
-        capture_lbl = ttk.Label(bottom, text="Capture:", style="Inline.TLabel")
+        capture_lbl = ttk.Label(bottom, text=self.config["capture_label_text"], style="Inline.TLabel")
         capture_lbl.grid(row=1, column=0, sticky="w", padx=(0, 5), pady=(5, 0))
 
         self.start_cap_btn = ttk.Button(
-            bottom, text="Start", command=self.start_capture,
+            bottom, text=self.config["capture_start_text"], command=self.start_capture,
             style="Accent.TButton"
         )
         self.start_cap_btn.grid(row=1, column=1, sticky="e", padx=(5, 5), pady=(5, 0))
 
         self.stop_cap_btn = ttk.Button(
-            bottom, text="Stop", command=self.stop_capture, state="disabled",
+            bottom, text=self.config["capture_stop_text"], command=self.stop_capture, state="disabled",
             style="Secondary.TButton"
         )
         self.stop_cap_btn.grid(row=1, column=2, sticky="e", padx=(5, 5), pady=(5, 0))
 
         self.cancel_cap_btn = ttk.Button(
-            bottom, text="Cancel", command=self.cancel_capture, state="disabled",
+            bottom, text=self.config["capture_cancel_text"], command=self.cancel_capture, state="disabled",
             style="Secondary.TButton"
         )
         self.cancel_cap_btn.grid(row=1, column=3, sticky="e", padx=(5, 5), pady=(5, 0))
 
         # Quit button
-        quit_btn = ttk.Button(bottom, text="Quit", command=self.on_close,
+        quit_btn = ttk.Button(bottom, text=self.config["quit_button_text"], command=self.on_close,
                               style="Secondary.TButton")
         quit_btn.grid(row=1, column=4, sticky="e", padx=(10, 0), pady=(5, 0))
 
@@ -338,7 +393,7 @@ class MLXLiveGUI:
         self.plot_frame.rowconfigure(0, weight=1)
         self.plot_frame.columnconfigure(0, weight=1)
 
-        self.fig = Figure(figsize=(10, 8), dpi=100)
+        self.fig = Figure(figsize=self.config["figure_size"], dpi=self.config["figure_dpi"])
         self.fig.patch.set_facecolor("#f4f5f7")
 
         # Top plot: Compensated magnetic delta
@@ -349,16 +404,20 @@ class MLXLiveGUI:
         self.ax_raw.spines["right"].set_visible(False)
         self.ax_raw.spines["left"].set_color("#888888")
         self.ax_raw.spines["bottom"].set_color("#888888")
-        self.ax_raw.tick_params(colors="#444444")
-        self.ax_raw.set_title("Compensated Magnetic Delta (last {:.1f} s)".format(self.history_seconds))
-        self.ax_raw.set_ylabel("Field (µT)")
+        self.ax_raw.tick_params(colors="#444444", labelsize=self.config["axis_tick_font_size"])
+        self.ax_raw.set_title(
+            self.config["magnetic_plot_title"],
+            fontsize=self.config["plot_title_font_size"],
+        )
+        self.ax_raw.set_ylabel(self.config["magnetic_axis_label"], fontsize=self.config["axis_label_font_size"])
         self.ax_raw.tick_params(labelbottom=False)
 
         self.text_overlay_raw = self.ax_raw.text(
             0.02, 0.98, "",
             transform=self.ax_raw.transAxes,
             va="top", ha="left",
-            fontsize=11, fontfamily="Consolas", color="#222222",
+            fontsize=self.config["overlay_font_size"],
+            fontfamily=self.config["mono_font_family"], color="#222222",
             bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
                       alpha=0.6, edgecolor="#cccccc"),
         )
@@ -374,7 +433,14 @@ class MLXLiveGUI:
         self.line_x_raw, = self.ax_raw.plot([], [], label="X", linewidth=2.5, color=x_color)
         self.line_y_raw, = self.ax_raw.plot([], [], label="Y", linewidth=2.5, color=y_color)
         self.line_z_raw, = self.ax_raw.plot([], [], label="Z", linewidth=2.5, color=z_color)
-        self.ax_raw.legend(loc="upper right", frameon=False)
+        self.ax_raw.legend(
+            loc="lower right",
+            frameon=True,
+            facecolor="white",
+            edgecolor="#cccccc",
+            framealpha=1.0,
+            fontsize=self.config["legend_font_size"],
+        )
 
         # Bottom plot: Force measurements
         self.ax_force = self.fig.add_subplot(212, sharex=self.ax_raw)
@@ -384,16 +450,17 @@ class MLXLiveGUI:
         self.ax_force.spines["right"].set_visible(False)
         self.ax_force.spines["left"].set_color("#888888")
         self.ax_force.spines["bottom"].set_color("#888888")
-        self.ax_force.tick_params(colors="#444444")
-        self.ax_force.set_title("Force Measurements")
-        self.ax_force.set_xlabel("Time (s)")
-        self.ax_force.set_ylabel("Force (N)")
+        self.ax_force.tick_params(colors="#444444", labelsize=self.config["axis_tick_font_size"])
+        self.ax_force.set_title(self.config["force_plot_title"], fontsize=self.config["plot_title_font_size"])
+        self.ax_force.set_xlabel(self.config["time_axis_label"], fontsize=self.config["axis_label_font_size"])
+        self.ax_force.set_ylabel(self.config["force_axis_label"], fontsize=self.config["axis_label_font_size"])
 
         self.text_overlay_force = self.ax_force.text(
             0.02, 0.98, "",
             transform=self.ax_force.transAxes,
             va="top", ha="left",
-            fontsize=11, fontfamily="Consolas", color="#222222",
+            fontsize=self.config["overlay_font_size"],
+            fontfamily=self.config["mono_font_family"], color="#222222",
             bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
                       alpha=0.6, edgecolor="#cccccc"),
         )
@@ -406,38 +473,46 @@ class MLXLiveGUI:
         self.shadow_down, = self.ax_force.plot([], [], linewidth=4, alpha=0.10, color=down_color)
         self.line_grip, = self.ax_force.plot([], [], label="Grip Force", linewidth=2.5, color=grip_color)
         self.line_down, = self.ax_force.plot([], [], label="Downforce", linewidth=2.5, color=down_color)
-        self.ax_force.legend(loc="upper right", frameon=False)
+        self.ax_force.legend(
+            loc="lower right",
+            frameon=True,
+            facecolor="white",
+            edgecolor="#cccccc",
+            framealpha=1.0,
+            fontsize=self.config["legend_font_size"],
+        )
 
         self.fig.tight_layout()
+        self.fig.subplots_adjust(right=self.config["figure_right_margin"])
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.plot_frame)
         self.canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
 
     def _update_stream_status(self):
-        status = "Status: Streaming"
+        status = self.config["status_streaming_text"]
         if getattr(self.ros_node, "ambient_stale", True):
-            status += " (Ambient Stale)"
+            status += self.config["status_ambient_stale_suffix"]
         if self.capture_active:
-            status += " (Capturing)"
+            status += self.config["status_capturing_suffix"]
         self.status_var.set(status)
 
     def _cycle_top_plot_mode(self):
         if self.top_plot_mode == "compensated":
             self.top_plot_mode = "force_raw"
-            self.top_plot_mode_var.set("Plot: Force")
+            self.top_plot_mode_var.set(self.config["plot_mode_button_force_text"])
         elif self.top_plot_mode == "force_raw":
             self.top_plot_mode = "ambient_raw"
-            self.top_plot_mode_var.set("Plot: Ambient")
+            self.top_plot_mode_var.set(self.config["plot_mode_button_ambient_text"])
         else:
             self.top_plot_mode = "compensated"
-            self.top_plot_mode_var.set("Plot: Comp")
+            self.top_plot_mode_var.set(self.config["plot_mode_button_comp_text"])
 
     def _cycle_force_plot_mode(self):
         if self.force_plot_mode == "compensated":
             self.force_plot_mode = "non_compensated"
-            self.force_plot_mode_var.set("Force: Raw")
+            self.force_plot_mode_var.set(self.config["force_mode_button_raw_text"])
         else:
             self.force_plot_mode = "compensated"
-            self.force_plot_mode_var.set("Force: Comp")
+            self.force_plot_mode_var.set(self.config["force_mode_button_comp_text"])
 
     def tare_stream(self):
         """Set simultaneous tare offsets for force and ambient sensors."""
@@ -454,7 +529,7 @@ class MLXLiveGUI:
                 f"ambient=({self.tare_ax:.2f}, {self.tare_ay:.2f}, {self.tare_az:.2f}) "
                 f"from avg of last {self.tare_window_samples} samples"
             )
-            self.status_var.set("Status: Tared (Dual)")
+            self.status_var.set(self.config["status_tared_text"])
             self.root.after(1000, self._update_stream_status)
 
     @staticmethod
@@ -547,7 +622,7 @@ class MLXLiveGUI:
         self._update_from_queue()
         self._update_plot()
         self._update_sample_rate()
-        self.root.after(50, self._schedule_update)
+        self.root.after(self.config["update_interval_ms"], self._schedule_update)
 
     def _update_from_queue(self):
         """Drain data queue and update buffers."""
@@ -691,20 +766,26 @@ class MLXLiveGUI:
             X_disp = self.Xf_tared_smooth
             Y_disp = self.Yf_tared_smooth
             Z_disp = self.Zf_tared_smooth
-            self.ax_raw.set_title("Force Sensor Tared Magnetic Field (last {:.1f} s)".format(self.history_seconds))
-            overlay_label = "Force"
+            self.ax_raw.set_title(
+                self.config["force_raw_plot_title"],
+                fontsize=self.config["plot_title_font_size"],
+            )
         elif self.top_plot_mode == "ambient_raw":
             X_disp = self.Xa_tared_smooth
             Y_disp = self.Ya_tared_smooth
             Z_disp = self.Za_tared_smooth
-            self.ax_raw.set_title("Ambient Sensor Tared Magnetic Field (last {:.1f} s)".format(self.history_seconds))
-            overlay_label = "Ambient"
+            self.ax_raw.set_title(
+                self.config["ambient_plot_title"],
+                fontsize=self.config["plot_title_font_size"],
+            )
         else:
             X_disp = self.X_raw_smooth
             Y_disp = self.Y_raw_smooth
             Z_disp = self.Z_raw_smooth
-            self.ax_raw.set_title("Compensated Magnetic Delta (last {:.1f} s)".format(self.history_seconds))
-            overlay_label = "Comp"
+            self.ax_raw.set_title(
+                self.config["magnetic_plot_title"],
+                fontsize=self.config["plot_title_font_size"],
+            )
 
         # Update compensated magnetic field lines
         self.line_x_raw.set_data(t_rel, X_disp)
@@ -718,9 +799,9 @@ class MLXLiveGUI:
         # Update text overlay for compensated data
         if X_disp and Y_disp and Z_disp:
             self.text_overlay_raw.set_text(
-                f"{overlay_label} X: {X_disp[-1]:6.2f} µT\n"
-                f"{overlay_label} Y: {Y_disp[-1]:6.2f} µT\n"
-                f"{overlay_label} Z: {Z_disp[-1]:6.2f} µT"
+                f'{self.config["overlay_x_label"]}: {X_disp[-1]:6.2f} µT\n'
+                f'{self.config["overlay_y_label"]}: {Y_disp[-1]:6.2f} µT\n'
+                f'{self.config["overlay_z_label"]}: {Z_disp[-1]:6.2f} µT'
             )
 
         # Update raw axis limits
@@ -744,13 +825,17 @@ class MLXLiveGUI:
         if self.force_plot_mode == "non_compensated":
             grip_disp = self.grip_force_noncomp_smooth
             down_disp = self.downforce_noncomp_smooth
-            force_label = "Raw"
-            self.ax_force.set_title("Force Measurements (Force Sensor Only)")
+            self.ax_force.set_title(
+                self.config["force_plot_title"],
+                fontsize=self.config["plot_title_font_size"],
+            )
         else:
             grip_disp = self.grip_force_smooth
             down_disp = self.downforce_smooth
-            force_label = "Comp"
-            self.ax_force.set_title("Force Measurements (Compensated)")
+            self.ax_force.set_title(
+                self.config["force_plot_title"],
+                fontsize=self.config["plot_title_font_size"],
+            )
 
         if grip_disp and down_disp:
             self.line_grip.set_data(t_rel, grip_disp)
@@ -761,8 +846,8 @@ class MLXLiveGUI:
 
             # Update text overlay for forces
             self.text_overlay_force.set_text(
-                f"{force_label} Grip: {grip_disp[-1]:6.2f} N\n"
-                f"{force_label} Down: {down_disp[-1]:6.2f} N"
+                f'{self.config["overlay_grip_label"]}: {grip_disp[-1]:6.2f} N\n'
+                f'{self.config["overlay_downforce_label"]}: {down_disp[-1]:6.2f} N'
             )
 
             # Update force axis limits
@@ -790,9 +875,11 @@ class MLXLiveGUI:
             dt = self.times[-1] - self.times[0]
             if dt > 0:
                 rate = (len(self.times) - 1) / dt
-                self.sample_rate_var.set(f"Approx. sample rate: {rate:.1f} Hz")
+                self.sample_rate_var.set(f'{self.config["sample_rate_prefix"]} {rate:.1f} Hz')
         else:
-            self.sample_rate_var.set("Approx. sample rate: –")
+            self.sample_rate_var.set(
+                f'{self.config["sample_rate_prefix"]} {self.config["sample_rate_placeholder"]}'
+            )
 
 
 class MLXGuiNode(Node):
@@ -804,7 +891,7 @@ class MLXGuiNode(Node):
 
         self.latest_ambient = (0.0, 0.0, 0.0)
         self.latest_ambient_time = None
-        self.ambient_stale_timeout_s = 0.5
+        self.ambient_stale_timeout_s = GUI_CONFIG["ambient_stale_timeout_s"]
         self.ambient_stale = True
 
         self.force_subscription = self.create_subscription(
@@ -866,7 +953,7 @@ def main(args=None):
 
     # Run GUI on main thread
     root = tk.Tk()
-    gui = MLXLiveGUI(root, node, data_queue, history_seconds=15.0)
+    gui = MLXLiveGUI(root, node, data_queue, GUI_CONFIG)
     root.mainloop()
 
     # Cleanup
