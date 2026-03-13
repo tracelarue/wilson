@@ -676,6 +676,10 @@ class AudioLoop:
                 f"Calling tool: {function_call.name}",
                 self._summarize_tool_args(tool_args),
             )
+            self.ui.log_event(
+                f"MCP request fields: {function_call.name}",
+                self._format_selected_activity_fields(tool_args, ("goal",)),
+            )
             self.ui.set_status(f"Running tool {function_call.name}")
 
             # Execute tool call through MCP server
@@ -689,9 +693,17 @@ class AudioLoop:
                     arguments=tool_args,
                 )
                 response_data = self._parse_tool_result(result)
+                self.ui.log_event(
+                    f"MCP response fields: {function_call.name}",
+                    self._format_selected_activity_fields(response_data, ("result",)),
+                )
             except Exception as e:
                 response_data = {"error": str(e)}
                 self.ui.log_event(f"Tool failed: {function_call.name}", str(e))
+                self.ui.log_event(
+                    f"MCP response fields: {function_call.name}",
+                    self._format_selected_activity_fields(response_data, ("result",)),
+                )
                 self.ui.set_status(f"Tool failed: {function_call.name}")
 
             # Send final response to Gemini
@@ -749,6 +761,30 @@ class AudioLoop:
                     break
             return ", ".join(parts)
         return " ".join(str(value).split())
+
+    def _format_activity_payload(self, value, max_length=2000):
+        """Format structured payloads for the activity feed without flooding the UI."""
+        if value is None:
+            return ""
+
+        try:
+            formatted = json.dumps(value, indent=2, ensure_ascii=True, default=str)
+        except TypeError:
+            formatted = str(value)
+
+        if len(formatted) <= max_length:
+            return formatted
+        return formatted[: max_length - 3] + "..."
+
+    def _format_selected_activity_fields(self, value, field_names, max_length=2000):
+        """Format only the requested top-level payload fields for the activity feed."""
+        if not isinstance(value, dict):
+            return ""
+
+        filtered = {name: value[name] for name in field_names if name in value}
+        if not filtered:
+            return ""
+        return self._format_activity_payload(filtered, max_length=max_length)
 
     def _extract_activity_content(self, value):
         """Pull the most useful human-facing content out of nested tool payloads."""
