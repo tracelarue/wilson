@@ -94,7 +94,7 @@ uv run gemini_client.py
 uv run gemini_client.py --video=camera --responses=TEXT --active-muting=false
 uv run gemini_client.py --responses=AUDIO --mute-mic=true
 ```
-Type `q` + Enter to quit.
+The terminal UI keeps a fixed input box at the top and shows rolling Gemini, MCP, and tool activity beneath it. Type `q` + Enter to quit.
 
 ## Test with Turtlesim
 

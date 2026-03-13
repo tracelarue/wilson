@@ -4,8 +4,12 @@ import base64
 import io
 import json
 import os
+import shutil
 import sys
+import termios
+import textwrap
 import traceback
+import tty
 
 import cv2
 import mss
@@ -295,6 +299,192 @@ client = genai.Client(
 pya = pyaudio.PyAudio()
 
 
+class TerminalUI:
+    """Terminal UI with a fixed input area and a rolling event log."""
+
+    RESET = "\x1b[0m"
+    BORDER = "\x1b[38;5;110m"
+    ACCENT = "\x1b[1;38;5;223m"
+    MUTED = "\x1b[38;5;247m"
+    STATUS = "\x1b[38;5;151m"
+    INPUT = "\x1b[38;5;195m"
+    EVENT = "\x1b[38;5;255m"
+
+    def __init__(self):
+        self._fd = None
+        self._old_term_settings = None
+        self._render_task = None
+        self._input_queue = asyncio.Queue()
+        self._input_buffer = ""
+        self._events = []
+        self._status = "Initializing..."
+        self._active = False
+        self._max_events = 400
+
+    async def start(self):
+        """Enter alternate-screen mode and start the render loop."""
+        if not sys.stdin.isatty() or not sys.stdout.isatty():
+            raise RuntimeError("Interactive terminal UI requires a TTY")
+
+        self._fd = sys.stdin.fileno()
+        self._old_term_settings = termios.tcgetattr(self._fd)
+        tty.setcbreak(self._fd)
+        self._active = True
+        self._write("\x1b[?1049h\x1b[2J\x1b[H\x1b[?25l")
+
+        loop = asyncio.get_running_loop()
+        loop.add_reader(self._fd, self._handle_stdin_ready)
+        self._render_task = asyncio.create_task(self._render_loop())
+
+    async def stop(self):
+        """Stop rendering and restore terminal state."""
+        if not self._active:
+            return
+
+        self._active = False
+        loop = asyncio.get_running_loop()
+        loop.remove_reader(self._fd)
+
+        if self._render_task is not None:
+            self._render_task.cancel()
+            try:
+                await self._render_task
+            except asyncio.CancelledError:
+                pass
+
+        if self._old_term_settings is not None:
+            termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_term_settings)
+        self._write("\x1b[2J\x1b[H\x1b[?25h\x1b[?1049l")
+
+    def set_status(self, message):
+        """Update the status line."""
+        self._status = str(message)
+
+    def log_event(self, title, detail=""):
+        """Append an event to the rolling log."""
+        self._events.append((str(title), str(detail)))
+        if len(self._events) > self._max_events:
+            self._events = self._events[-self._max_events :]
+
+    async def next_input(self):
+        """Return the next submitted input line."""
+        return await self._input_queue.get()
+
+    def _handle_stdin_ready(self):
+        """Consume pending characters from stdin."""
+        try:
+            chars = os.read(self._fd, 1024).decode(errors="ignore")
+        except OSError:
+            return
+
+        for ch in chars:
+            if ch in ("\n", "\r"):
+                self._input_queue.put_nowait(self._input_buffer)
+                self._input_buffer = ""
+            elif ch in ("\x7f", "\b"):
+                self._input_buffer = self._input_buffer[:-1]
+            elif ch == "\x03":
+                self._input_queue.put_nowait("q")
+            elif ch.isprintable():
+                self._input_buffer += ch
+
+    async def _render_loop(self):
+        """Redraw the terminal UI at a fixed cadence."""
+        while True:
+            self._render()
+            await asyncio.sleep(0.1)
+
+    def _render(self):
+        cols, rows = shutil.get_terminal_size((100, 30))
+        log_height = max(8, rows - 12)
+        lines = ["\x1b[H"]
+
+        lines.extend(
+            self._panel(
+                cols,
+                "Gemini Live Console",
+                [
+                    (
+                        "Type a message and press Enter. Press q and Enter to quit.",
+                        self.MUTED,
+                    ),
+                    (self._truncate("> " + self._input_buffer, cols - 6), self.INPUT),
+                    (
+                        self._truncate(f"Status: {self._status}", cols - 6),
+                        self.STATUS,
+                    ),
+                ],
+            )
+        )
+
+        event_lines = self._render_events(cols - 6, log_height)
+        lines.extend(self._panel(cols, "Activity Feed", event_lines, min_height=log_height))
+        self._write("".join(lines))
+
+    def _render_events(self, width, max_lines):
+        rendered = []
+        for title, detail in self._events:
+            rendered.extend((line, self.ACCENT) for line in (self._wrap_lines(title, width) or [""]))
+            if detail:
+                rendered.extend(
+                    (f"  {line}", self.EVENT)
+                    for line in (self._wrap_lines(detail, max(1, width - 2)) or [""])
+                )
+        if not rendered:
+            rendered = [("Waiting for session activity...", self.MUTED)]
+        return rendered[-max_lines:]
+
+    def _wrap_lines(self, text, width):
+        chunks = []
+        for raw_line in (text or "").splitlines() or [""]:
+            chunks.extend(textwrap.wrap(raw_line, width=width) or [""])
+        return chunks
+
+    def _panel(self, cols, title, body_lines, min_height=0):
+        lines = [self._border_line(cols), self._boxed_line(f" {title} ", cols, style=self.ACCENT)]
+        content_lines = list(body_lines)
+        while len(content_lines) < min_height:
+            content_lines.append("")
+        for line in content_lines:
+            if isinstance(line, tuple):
+                text, style = line
+            else:
+                text, style = line, ""
+            lines.append(self._boxed_line(text, cols, style=style))
+        lines.append(self._border_line(cols))
+        return lines
+
+    def _border_line(self, cols):
+        return self._style("+" + "=" * (cols - 2) + "+\n", self.BORDER)
+
+    def _boxed_line(self, text, cols, style=""):
+        content = self._truncate(text, cols - 6)
+        line = f"|| {content.ljust(cols - 6)} ||\n"
+        return self._style(line, self.BORDER, content_style=style)
+
+    def _truncate(self, text, width):
+        if len(text) <= width:
+            return text
+        return text[: max(0, width - 3)] + "..."
+
+    def _style(self, text, outer_style, content_style=""):
+        if not outer_style and not content_style:
+            return text
+        if content_style:
+            if len(text) >= 7 and text.startswith("|| ") and text.endswith(" ||\n"):
+                inner = (
+                    f"{outer_style}|| {self.RESET}"
+                    f"{content_style}{text[3:-4]}{self.RESET}"
+                    f"{outer_style} ||{self.RESET}\n"
+                )
+                return inner
+        return f"{outer_style}{text}{self.RESET}"
+
+    def _write(self, text):
+        sys.stdout.write(text)
+        sys.stdout.flush()
+
+
 class AudioLoop:
     """
     Main class for handling Gemini Live audio/video interaction with MCP server integration.
@@ -383,6 +573,20 @@ class AudioLoop:
         # Calculate max buffer size needed for resampling
         max_input_samples = max(self.chunk_size, self.received_audio_buffer) * 2
         self.buffer_pool = BufferPool(buffer_size=max_input_samples)
+        self.ui = TerminalUI()
+
+    def _should_suppress_mcp_log(self, level, message):
+        """Hide noisy transport logs that do not help the operator."""
+        normalized = f"{level} {message}".lower()
+        websocket_markers = (
+            "websocket",
+            "web socket",
+            "rosbridge_websocket",
+            "rosbridge websocket",
+            "ws://",
+            "wss://",
+        )
+        return any(marker in normalized for marker in websocket_markers)
 
     async def _set_mic_active(self, active, message=None):
         """Update microphone capture state while honoring persistent startup mute."""
@@ -394,7 +598,8 @@ class AudioLoop:
             self.mic_active = active
 
         if message and state_changed:
-            print(message)
+            self.ui.log_event("Microphone", message)
+            self.ui.set_status(message)
 
     async def send_text(self):
         """
@@ -404,13 +609,12 @@ class AudioLoop:
         Breaks the loop when user types 'q' to quit.
         """
         while True:
-            text = await asyncio.to_thread(
-                input,
-                "🎤 message > ",
-            )
+            text = await self.ui.next_input()
             if text.lower() == "q":
                 break
 
+            self.ui.log_event("User message", text or ".")
+            self.ui.set_status("Sending user message")
             await self.session.send_client_content(
                 turns={"role": "user", "parts": [{"text": text or "."}]}, turn_complete=True
             )
@@ -426,12 +630,15 @@ class AudioLoop:
 
         for function_call in tool_call.function_calls:
             start_time = time.perf_counter()
-            print(f"\n🔧 Calling tool: {function_call.name}")
-            print(f"   Arguments: {function_call.args}")
+            tool_args = dict(function_call.args or {})
+            self.ui.log_event(
+                f"Calling tool: {function_call.name}",
+                self._summarize_tool_args(tool_args),
+            )
+            self.ui.set_status(f"Running tool {function_call.name}")
 
             # Execute tool call through MCP server
             # Add custom timeout for navigation actions (5 minutes instead of default 2 minutes)
-            tool_args = dict(function_call.args or {})
             if function_call.name == "navigate_to_location":
                 tool_args["timeout"] = 300.0  # 5 minutes for navigation
 
@@ -443,7 +650,8 @@ class AudioLoop:
                 response_data = self._parse_tool_result(result)
             except Exception as e:
                 response_data = {"error": str(e)}
-                print(f"🔴 Tool execution failed for {function_call.name}: {e}")
+                self.ui.log_event(f"Tool failed: {function_call.name}", str(e))
+                self.ui.set_status(f"Tool failed: {function_call.name}")
 
             # Send final response to Gemini
             # IMPORTANT: Never use will_continue=False as it signals failure/retry
@@ -459,9 +667,14 @@ class AudioLoop:
             try:
                 await self.session.send_tool_response(function_responses=function_responses)
                 elapsed = time.perf_counter() - start_time
-                print(f"✅ Sent tool result for {function_call.name} in {elapsed:.2f}s")
+                self.ui.log_event(
+                    f"Tool result: {function_call.name} ({elapsed:.2f}s)",
+                    self._summarize_tool_result(response_data),
+                )
+                self.ui.set_status(f"Sent tool result for {function_call.name}")
             except Exception as e:
-                print(f"🔴 Error sending tool response: {e}")
+                self.ui.log_event(f"Tool response send failed: {function_call.name}", str(e))
+                self.ui.set_status(f"Error sending result for {function_call.name}")
 
     def _content_item_to_text(self, content_item):
         """Convert a single MCP content item into a plain string."""
@@ -473,6 +686,130 @@ class AudioLoop:
         if isinstance(content_item, dict):
             return json.dumps(content_item, separators=(",", ":"))
         return str(content_item)
+
+    def _stringify_activity_value(self, value):
+        """Convert nested values into compact single-line text for the activity feed."""
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return " ".join(value.split())
+        if isinstance(value, (int, float, bool)):
+            return str(value)
+        if isinstance(value, list):
+            parts = [self._stringify_activity_value(item) for item in value]
+            return ", ".join(part for part in parts if part)
+        if isinstance(value, dict):
+            parts = []
+            for key, item in value.items():
+                text = self._stringify_activity_value(item)
+                if text:
+                    parts.append(f"{key}={text}")
+                if len(parts) >= 4:
+                    break
+            return ", ".join(parts)
+        return " ".join(str(value).split())
+
+    def _extract_activity_content(self, value):
+        """Pull the most useful human-facing content out of nested tool payloads."""
+        priority_keys = (
+            "message",
+            "text",
+            "result",
+            "response",
+            "summary",
+            "status",
+            "error",
+            "reason",
+            "location",
+            "object_name",
+            "name",
+            "value",
+        )
+
+        if isinstance(value, dict):
+            parts = []
+            for key in priority_keys:
+                if key not in value:
+                    continue
+                text = self._extract_activity_content(value[key])
+                if not text:
+                    continue
+                if key in {"message", "text", "result", "response", "summary"}:
+                    parts.append(text)
+                else:
+                    parts.append(f"{key}: {text}")
+            if parts:
+                return " | ".join(parts[:3])
+
+            fallback_parts = []
+            for key, item in value.items():
+                text = self._extract_activity_content(item)
+                if text:
+                    fallback_parts.append(f"{key}: {text}")
+                if len(fallback_parts) >= 3:
+                    break
+            return " | ".join(fallback_parts)
+
+        if isinstance(value, list):
+            parts = []
+            for item in value:
+                text = self._extract_activity_content(item)
+                if text:
+                    parts.append(text)
+                if len(parts) >= 3:
+                    break
+            return " | ".join(parts)
+
+        return self._stringify_activity_value(value)
+
+    def _summarize_tool_args(self, tool_args):
+        """Create a concise activity-feed summary for a tool call payload."""
+        if not tool_args:
+            return "No arguments"
+
+        important_keys = (
+            "message",
+            "text",
+            "location",
+            "target",
+            "destination",
+            "object_name",
+            "name",
+            "action",
+            "query",
+            "prompt",
+            "timeout",
+        )
+
+        parts = []
+        for key in important_keys:
+            if key not in tool_args:
+                continue
+            text = self._extract_activity_content(tool_args[key])
+            if text:
+                parts.append(f"{key}: {text}")
+
+        if not parts:
+            for key, value in tool_args.items():
+                text = self._extract_activity_content(value)
+                if text:
+                    parts.append(f"{key}: {text}")
+                if len(parts) >= 3:
+                    break
+
+        return " | ".join(parts[:3]) or "No arguments"
+
+    def _summarize_tool_result(self, response_data):
+        """Create a concise activity-feed summary for a tool result payload."""
+        if not response_data:
+            return "No result"
+
+        summary = self._extract_activity_content(response_data)
+        if not summary and isinstance(response_data, dict):
+            summary = self._stringify_activity_value(response_data)
+
+        summary = summary or "No result"
+        return summary[:400]
 
     def _parse_tool_result(self, result):
         """
@@ -649,7 +986,7 @@ class AudioLoop:
                 break
             except Exception as e:
                 # Keepalive failures are non-critical
-                print(f"⚠️ Keepalive failed (non-fatal): {e}")
+                self.ui.log_event("Keepalive failed", str(e))
 
     def _iter_nested_exceptions(self, exc):
         """Yield leaf exceptions from nested ExceptionGroup-like objects."""
@@ -682,7 +1019,7 @@ class AudioLoop:
             mic_info = pya.get_device_info_by_index(self.mic_index)
         else:
             mic_info = pya.get_default_input_device_info()
-        print("Microphone:", mic_info["name"])
+        self.ui.log_event("Microphone selected", mic_info["name"])
 
         # Initialize audio input stream
         self.audio_stream = await asyncio.to_thread(
@@ -696,7 +1033,7 @@ class AudioLoop:
         )
 
         if self.startup_muted:
-            print("🔇 Microphone muted at startup and will remain muted")
+            self.ui.log_event("Microphone", "Muted at startup and will remain muted")
 
         # Configure overflow handling for debug vs release
         overflow_kwargs = {"exception_on_overflow": False} if __debug__ else {}
@@ -751,7 +1088,6 @@ class AudioLoop:
         while True:
             turn = self.session.receive()
             turn_text = ""
-            first_text = True
             has_audio_in_turn = False
 
             async for response in turn:
@@ -774,24 +1110,12 @@ class AudioLoop:
                                 pass
 
                         # Handle text responses
-#                        if part.text:
-#                            text_content = part.text
-#                            if first_text:
-#                                print(f"\n🤖 > {text_content}", end="", flush=True)
-#                                first_text = False
-#                            else:
-#                                print(text_content, end="", flush=True)
-#                            turn_text += text_content
-#                    continue
-#
-#                # Fallback: Handle text responses from Gemini (for backward compatibility)
-#                if text_content := response.text:
-#                    if first_text:
-#                        print(f"\n🤖 > {text_content}", end="", flush=True)
-#                        first_text = False
-#                    else:
-#                        print(text_content, end="", flush=True)
-#                    turn_text += text_content
+                        if part.text:
+                            turn_text += part.text
+
+                # Fallback: Handle text responses from Gemini (for backward compatibility)
+                if response.text:
+                    turn_text += response.text
 
                 # Handle server content (currently disabled)
                 """
@@ -821,10 +1145,8 @@ class AudioLoop:
             async with self.audio_stream_lock:
                 self.audio_stream_active = False
 
-            # Complete the response display
             if turn_text:
-                print()  # Add newline after response
-                print("🎤 message > ", end="", flush=True)  # Show next prompt
+                self.ui.set_status("Gemini responded")
 
             # Handle interruptions by clearing queued audio
             # This prevents audio backlog when user interrupts the model
@@ -899,7 +1221,7 @@ class AudioLoop:
                 await asyncio.to_thread(audio_stream.write, audio_bytes)
 
             except Exception as e:
-                print(f"🔴 Audio playback error: {str(e)}")
+                self.ui.log_event("Audio playback error", str(e))
                 # Re-enable microphone in case of error (if muting is enabled)
                 if self.active_muting:
                     await self._set_mic_active(
@@ -932,11 +1254,15 @@ class AudioLoop:
             return original_connect(*args, **kwargs)
 
         websockets.asyncio.client.connect = patched_connect
-        print("🔧 Patched websockets library: disabled client-side keepalive")
+        await self.ui.start()
+        self.ui.set_status("Starting Gemini session")
 
         # Define logging callback to receive log messages from MCP server
         async def logging_handler(params):
             """Handle log messages (info, debug, warning, error) from MCP server"""
+            if self._should_suppress_mcp_log(params.level, params.data):
+                return
+
             level_emoji = {
                 "debug": "🔍",
                 "info": "ℹ️",
@@ -948,162 +1274,169 @@ class AudioLoop:
                 "emergency": "🔥"
             }
             emoji = level_emoji.get(params.level, "📝")
-            print(f"   {emoji} [{params.level.upper()}] {params.data}")
+            self.ui.log_event(f"MCP log {emoji} [{params.level.upper()}]", str(params.data))
 
         reconnect_delay = RECONNECT_BASE_DELAY_SECONDS
-        while True:
-            # Connect to MCP server using stdio
-            async with stdio_client(server_params) as (read, write):
-                async with ClientSession(read, write, logging_callback=logging_handler) as mcp_session:
-                    # Initialize the connection between client and server
-                    await mcp_session.initialize()
+        try:
+            with open(os.devnull, "w", encoding="utf-8") as mcp_errlog:
+                while True:
+                    # Connect to MCP server using stdio.
+                    # ros-mcp writes websocket/rosbridge chatter to stderr; discard it.
+                    async with stdio_client(server_params, errlog=mcp_errlog) as (read, write):
+                        async with ClientSession(read, write, logging_callback=logging_handler) as mcp_session:
+                            # Initialize the connection between client and server
+                            await mcp_session.initialize()
+                            self.ui.log_event("MCP", "Connection initialized")
+                            self.ui.set_status("MCP initialized")
 
-                    # Store MCP session for tool calling
-                    self.mcp_session = mcp_session
+                            # Store MCP session for tool calling
+                            self.mcp_session = mcp_session
 
-                    # Get available tools from MCP server
-                    available_tools = await mcp_session.list_tools()
+                            # Get available tools from MCP server
+                            available_tools = await mcp_session.list_tools()
+                            self.ui.log_event("MCP", f"Loaded {len(available_tools.tools)} tools")
 
-                    # Convert MCP tools to Gemini-compatible format
-                    # The Live API does NOT support automatic MCP tool calling
-                    # So we must manually convert tools and handle execution
-                    functional_tools = []
+                            # Convert MCP tools to Gemini-compatible format
+                            # The Live API does NOT support automatic MCP tool calling
+                            # So we must manually convert tools and handle execution
+                            functional_tools = []
 
-                    for tool in available_tools.tools:
-                        tool_description = {"name": tool.name, "description": tool.description}
+                            for tool in available_tools.tools:
+                                tool_description = {"name": tool.name, "description": tool.description}
 
-                        # Process tool parameters if they exist
-                        if tool.inputSchema["properties"]:
-                            tool_description["parameters"] = {
-                                "type": tool.inputSchema["type"],
-                                "properties": {},
-                            }
+                                # Process tool parameters if they exist
+                                if tool.inputSchema["properties"]:
+                                    tool_description["parameters"] = {
+                                        "type": tool.inputSchema["type"],
+                                        "properties": {},
+                                    }
 
-                            # Convert each parameter to Gemini format
-                            for param_name in tool.inputSchema["properties"]:
-                                param_schema = tool.inputSchema["properties"][param_name]
+                                    # Convert each parameter to Gemini format
+                                    for param_name in tool.inputSchema["properties"]:
+                                        param_schema = tool.inputSchema["properties"][param_name]
 
-                                # Handle direct type or anyOf union types
-                                if "type" in param_schema:
-                                    param_type = param_schema["type"]
-                                elif "anyOf" in param_schema:
-                                    # For anyOf, use the first non-null type
-                                    param_type = "string"  # default fallback
-                                    for type_option in param_schema["anyOf"]:
-                                        if type_option.get("type") != "null":
-                                            param_type = type_option["type"]
-                                            break
-                                else:
-                                    param_type = "string"  # Fallback default
+                                        # Handle direct type or anyOf union types
+                                        if "type" in param_schema:
+                                            param_type = param_schema["type"]
+                                        elif "anyOf" in param_schema:
+                                            # For anyOf, use the first non-null type
+                                            param_type = "string"  # default fallback
+                                            for type_option in param_schema["anyOf"]:
+                                                if type_option.get("type") != "null":
+                                                    param_type = type_option["type"]
+                                                    break
+                                        else:
+                                            param_type = "string"  # Fallback default
 
-                                # Build parameter definition
-                                param_definition = {
-                                    "type": param_type,
-                                    "description": "",
-                                }
+                                        # Build parameter definition
+                                        param_definition = {
+                                            "type": param_type,
+                                            "description": "",
+                                        }
 
-                                # Handle array types that need items specification
-                                if param_type == "array" and "items" in param_schema:
-                                    items_schema = param_schema["items"]
-                                    if "type" in items_schema:
-                                        param_definition["items"] = {"type": items_schema["type"]}
-                                    else:
-                                        # Default to object for complex array items
-                                        param_definition["items"] = {"type": "object"}
+                                        # Handle array types that need items specification
+                                        if param_type == "array" and "items" in param_schema:
+                                            items_schema = param_schema["items"]
+                                            if "type" in items_schema:
+                                                param_definition["items"] = {"type": items_schema["type"]}
+                                            else:
+                                                # Default to object for complex array items
+                                                param_definition["items"] = {"type": "object"}
 
-                                tool_description["parameters"]["properties"][param_name] = (
-                                    param_definition
-                                )
+                                        tool_description["parameters"]["properties"][param_name] = (
+                                            param_definition
+                                        )
 
-                            # Add required parameters list if specified
-                            if "required" in tool.inputSchema:
-                                tool_description["parameters"]["required"] = tool.inputSchema[
-                                    "required"
-                                ]
+                                    # Add required parameters list if specified
+                                    if "required" in tool.inputSchema:
+                                        tool_description["parameters"]["required"] = tool.inputSchema[
+                                            "required"
+                                        ]
 
-                        functional_tools.append(tool_description)
+                                functional_tools.append(tool_description)
 
-                    # Configure Gemini Live tools (MCP tools + built-in capabilities)
-                    tools = [
-                        {
-                            "function_declarations": functional_tools,
-                            #"code_execution": {},  # Enable code execution
-                            #"google_search": {},  # Enable web search
-                        },
-                    ]
+                            # Configure Gemini Live tools (MCP tools + built-in capabilities)
+                            tools = [
+                                {
+                                    "function_declarations": functional_tools,
+                                    #"code_execution": {},  # Enable code execution
+                                    #"google_search": {},  # Enable web search
+                                },
+                            ]
 
-                    # Configure Gemini Live session
-                    live_config = types.LiveConnectConfig(
-                        response_modalities=[
-                            self.response_modality
-                        ],  # "Enable text or audio responses based on configuration"
-                        speech_config=types.SpeechConfig(
-                            voice_config=types.VoiceConfig(
-                                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Charon")
-                            )
-                        ),
-                        system_instruction=types.Content(parts=[types.Part(text=self.system_instructions)]),
-                        tools=tools,
-                    )
-
-                    try:
-                        # Start Gemini Live session and create task group
-                        async with (
-                            client.aio.live.connect(model=MODEL, config=live_config) as session,
-                            asyncio.TaskGroup() as task_group,
-                        ):
-                            self.session = session
-
-                            # Initialize communication queues
-                            self.audio_in_queue = asyncio.Queue(maxsize=400)  # Audio from Gemini (buffer for smooth playback)
-                            self.out_queue = asyncio.Queue(maxsize=3)  # Data to Gemini (small buffer for low latency)
-
-                            # Send an initial one-time turn to establish context/state.
-                            await self.session.send_client_content(
-                                turns={"role": "user", "parts": [{"text": INITIAL_CONNECT_MESSAGE}]},
-                                turn_complete=True,
+                            # Configure Gemini Live session
+                            live_config = types.LiveConnectConfig(
+                                response_modalities=[
+                                    self.response_modality
+                                ],  # "Enable text or audio responses based on configuration"
+                                speech_config=types.SpeechConfig(
+                                    voice_config=types.VoiceConfig(
+                                        prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Charon")
+                                    )
+                                ),
+                                system_instruction=types.Content(parts=[types.Part(text=self.system_instructions)]),
+                                tools=tools,
                             )
 
-                            # Start all async tasks
-                            send_text_task = task_group.create_task(self.send_text())
-                            task_group.create_task(self.send_realtime())
-                            if ENABLE_SYNTHETIC_KEEPALIVE:
-                                task_group.create_task(self.websocket_keepalive())
-                            task_group.create_task(self.listen_audio())
+                            try:
+                                # Start Gemini Live session and create task group
+                                async with (
+                                    client.aio.live.connect(model=MODEL, config=live_config) as session,
+                                    asyncio.TaskGroup() as task_group,
+                                ):
+                                    self.session = session
+                                    self.ui.log_event("Gemini", "Live session connected")
+                                    self.ui.set_status("Connected")
 
-                            # Start video capture based on selected mode
-                            if self.video_mode == "camera":
-                                task_group.create_task(self.get_frames())
-                            elif self.video_mode == "screen":
-                                task_group.create_task(self.get_screen())
+                                    # Initialize communication queues
+                                    self.audio_in_queue = asyncio.Queue(maxsize=400)  # Audio from Gemini (buffer for smooth playback)
+                                    self.out_queue = asyncio.Queue(maxsize=3)  # Data to Gemini (small buffer for low latency)
 
-                            # Start audio processing tasks
-                            task_group.create_task(self.receive_audio())
-                            task_group.create_task(self.play_audio())
+                                    # Send an initial one-time turn to establish context/state.
+                                    await self.session.send_client_content(
+                                        turns={"role": "user", "parts": [{"text": INITIAL_CONNECT_MESSAGE}]},
+                                        turn_complete=True,
+                                    )
+                                    self.ui.log_event("Gemini", "Sent initial connect message")
 
-                            # Wait for user to quit (send_text_task completes when user types 'q')
-                            await send_text_task
-                            raise asyncio.CancelledError("User requested exit")
+                                    # Start all async tasks
+                                    send_text_task = task_group.create_task(self.send_text())
+                                    task_group.create_task(self.send_realtime())
+                                    if ENABLE_SYNTHETIC_KEEPALIVE:
+                                        task_group.create_task(self.websocket_keepalive())
+                                    task_group.create_task(self.listen_audio())
 
-                    except asyncio.CancelledError:
-                        # Normal exit when user types 'q'
-                        return
-                    except asyncio.ExceptionGroup as exception_group:
-                        # Handle any errors that occurred in the task group
-                        if hasattr(self, 'audio_stream') and self.audio_stream is not None:
-                            self.audio_stream.close()
+                                    # Start video capture based on selected mode
+                                    if self.video_mode == "camera":
+                                        task_group.create_task(self.get_frames())
+                                    elif self.video_mode == "screen":
+                                        task_group.create_task(self.get_screen())
 
-                        if self._is_retryable_policy_violation(exception_group):
-                            print(
-                                f"⚠️ Live API closed with policy violation (1008). "
-                                f"Reconnecting in {reconnect_delay:.1f}s..."
-                            )
-                            await asyncio.sleep(reconnect_delay)
-                            reconnect_delay = min(reconnect_delay * 2.0, RECONNECT_MAX_DELAY_SECONDS)
-                            continue
+                                    # Start audio processing tasks
+                                    task_group.create_task(self.receive_audio())
+                                    task_group.create_task(self.play_audio())
 
-                        traceback.print_exception(exception_group)
-                        return
+                                    # Wait for user to quit (send_text_task completes when user types 'q')
+                                    await send_text_task
+                                    raise asyncio.CancelledError("User requested exit")
+
+                            except asyncio.CancelledError:
+                                # Normal exit when user types 'q'
+                                return
+                            except asyncio.ExceptionGroup as exception_group:
+                                if self._is_retryable_policy_violation(exception_group):
+                                    self.ui.log_event(
+                                        "Gemini reconnect",
+                                        f"Policy violation (1008), retrying in {reconnect_delay:.1f}s",
+                                    )
+                                    self.ui.set_status("Reconnecting after Live API policy violation")
+                                    await asyncio.sleep(reconnect_delay)
+                                    reconnect_delay = min(reconnect_delay * 2.0, RECONNECT_MAX_DELAY_SECONDS)
+                                    continue
+
+                                raise
+        finally:
+            await self.ui.stop()
 
 
 if __name__ == "__main__":
@@ -1145,13 +1478,6 @@ if __name__ == "__main__":
         help="Initialize with the microphone muted and keep it muted (true/false, default: false)",
     )
     args = parser.parse_args()
-
-    # List available audio devices for debugging
-    print(
-        f"\n🔧 Initializing in '{args.mode}' mode with video='{args.video}', "
-        f"responses='{args.responses}' and mute_mic='{args.mute_mic}'"
-    )
-    list_audio_devices()
 
     # Initialize and run the audio loop
     audio_loop = AudioLoop(
