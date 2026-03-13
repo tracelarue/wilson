@@ -188,7 +188,7 @@ def generate_launch_description():
     # Timer for action servers - start after move_group is ready
     action_servers_timer = TimerAction(
         period=13.0,
-        actions=[locate_object_server_node, grab_object_server_node, move_to_state_server_node, navigate_to_location_server_node, mini_fridge_action_server_node]
+        actions=[locate_object_server_node, grab_object_server_node, move_to_state_server_node]
     )
 
     # Add timer to start navigation after Gazebo is ready
@@ -211,7 +211,7 @@ def generate_launch_description():
 
     # Timed optional processes
     rosbridge_timer = TimerAction(
-        period=1.0,
+        period=3.0,
         actions=[rosbridge_server]
     )
 
@@ -262,8 +262,8 @@ def generate_launch_description():
         declare_initial_pose_yaw,
         robot_launch,
         move_group_timer,
-        nav2_timer,
-        localization_timer,
+        #nav2_timer,
+        #localization_timer,
         action_servers_timer,
         #teleop,
         rosbridge_timer

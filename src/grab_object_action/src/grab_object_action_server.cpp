@@ -418,14 +418,6 @@ private:
             task.add(std::move(stage_transition_to_grab));
         }
 
-        // Go to Ready to grab
-        {
-            auto stage_ready_to_grab = std::make_unique<mtc::stages::MoveTo>("Ready to grab", sampling_planner);
-            stage_ready_to_grab->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
-            stage_ready_to_grab->setGoal("ready_to_grab");
-            task.add(std::move(stage_ready_to_grab));
-        }
-
         // Open Hand
         {
             auto stage_open_hand =
@@ -434,6 +426,15 @@ private:
             stage_open_hand->setGoal("open");
             task.add(std::move(stage_open_hand));
         }
+
+        // Go to Ready to grab
+        {
+            auto stage_ready_to_grab = std::make_unique<mtc::stages::MoveTo>("Ready to grab", sampling_planner);
+            stage_ready_to_grab->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
+            stage_ready_to_grab->setGoal("ready_to_grab");
+            task.add(std::move(stage_ready_to_grab));
+        }
+
 
         // Move to Grab
         {
