@@ -308,6 +308,7 @@ class AudioLoop:
         video_mode=DEFAULT_VIDEO_MODE,
         response_modality=DEFAULT_RESPONSE_MODALITY,
         active_muting=True,
+        mute_mic=False,
     ):
         """
         Initialize the AudioLoop with specified mode, video mode and response modality.
@@ -317,11 +318,13 @@ class AudioLoop:
             video_mode: Video input source - "camera", "screen", or "none"
             response_modality: Response format - "TEXT" or "AUDIO"
             active_muting: Whether to mute mic during audio playback
+            mute_mic: Whether to start with the microphone muted and keep it muted
         """
         self.mode = mode
         self.video_mode = video_mode
         self.response_modality = response_modality
         self.active_muting = active_muting
+        self.startup_muted = mute_mic
 
         # Load system instructions based on mode
         base_system_instructions = load_system_instructions(mode).rstrip()
@@ -368,7 +371,7 @@ class AudioLoop:
         self.play_audio_task = None
 
         # Control flags for audio management
-        self.mic_active = True
+        self.mic_active = not self.startup_muted
         self.mic_lock = asyncio.Lock()
 
         # Audio streaming state tracking
@@ -380,6 +383,18 @@ class AudioLoop:
         # Calculate max buffer size needed for resampling
         max_input_samples = max(self.chunk_size, self.received_audio_buffer) * 2
         self.buffer_pool = BufferPool(buffer_size=max_input_samples)
+
+    async def _set_mic_active(self, active, message=None):
+        """Update microphone capture state while honoring persistent startup mute."""
+        if self.startup_muted:
+            active = False
+
+        async with self.mic_lock:
+            state_changed = self.mic_active != active
+            self.mic_active = active
+
+        if message and state_changed:
+            print(message)
 
     async def send_text(self):
         """
@@ -680,6 +695,9 @@ class AudioLoop:
             frames_per_buffer=self.chunk_size,
         )
 
+        if self.startup_muted:
+            print("🔇 Microphone muted at startup and will remain muted")
+
         # Configure overflow handling for debug vs release
         overflow_kwargs = {"exception_on_overflow": False} if __debug__ else {}
 
@@ -849,12 +867,11 @@ class AudioLoop:
                         # If stream is complete and queue is empty, we're done
                         if not stream_still_active and self.audio_in_queue.empty():
                             if self.active_muting:
-                                async with self.mic_lock:
-                                    self.mic_active = True
-                                    audio_playing = False
-                                    print("🎤 Microphone unmuted - audio playback complete")
-                            else:
-                                audio_playing = False
+                                await self._set_mic_active(
+                                    True,
+                                    "🎤 Microphone unmuted - audio playback complete",
+                                )
+                            audio_playing = False
                     continue
 
                 # Update last audio time
@@ -863,10 +880,11 @@ class AudioLoop:
                 # If this is the first audio chunk in a sequence, mute the microphone (if enabled)
                 if not audio_playing:
                     if self.active_muting:
-                        async with self.mic_lock:
-                            self.mic_active = False
-                            audio_playing = True
-                            print("🔇 Microphone muted while audio is playing")
+                        await self._set_mic_active(
+                            False,
+                            "🔇 Microphone muted while audio is playing",
+                        )
+                        audio_playing = True
 
                         # Small delay to ensure mic is fully muted
                         await asyncio.sleep(0.1)
@@ -884,12 +902,11 @@ class AudioLoop:
                 print(f"🔴 Audio playback error: {str(e)}")
                 # Re-enable microphone in case of error (if muting is enabled)
                 if self.active_muting:
-                    async with self.mic_lock:
-                        self.mic_active = True
-                        audio_playing = False
-                        print("🎤 Microphone unmuted after audio error")
-                else:
-                    audio_playing = False
+                    await self._set_mic_active(
+                        True,
+                        "🎤 Microphone unmuted after audio error",
+                    )
+                audio_playing = False
                 await asyncio.sleep(0.1)
 
     async def run(self):
@@ -1121,10 +1138,19 @@ if __name__ == "__main__":
         default=True,
         help="Mute microphone during audio playback (true/false, default: true)",
     )
+    parser.add_argument(
+        "--mute-mic",
+        type=lambda x: x.lower() == "true",
+        default=False,
+        help="Initialize with the microphone muted and keep it muted (true/false, default: false)",
+    )
     args = parser.parse_args()
 
     # List available audio devices for debugging
-    print(f"\n🔧 Initializing in '{args.mode}' mode with video='{args.video}' and responses='{args.responses}'")
+    print(
+        f"\n🔧 Initializing in '{args.mode}' mode with video='{args.video}', "
+        f"responses='{args.responses}' and mute_mic='{args.mute_mic}'"
+    )
     list_audio_devices()
 
     # Initialize and run the audio loop
@@ -1133,5 +1159,6 @@ if __name__ == "__main__":
         video_mode=args.video,
         response_modality=args.responses,
         active_muting=args.active_muting,
+        mute_mic=args.mute_mic,
     )
     asyncio.run(audio_loop.run())

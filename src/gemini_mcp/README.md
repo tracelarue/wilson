@@ -85,9 +85,14 @@ uv run gemini_client.py
 - `--active-muting=true` - Mute mic during audio playback (default, prevents echo/feedback). Recommended if not using headphones.
 - `--active-muting=false` - Keep mic active during audio playback
 
+**Persistent startup mute** (`--mute-mic`):
+- `--mute-mic=true` - Initialize audio normally, then keep the microphone muted for the entire session
+- `--mute-mic=false` - Use normal microphone behavior (default)
+
 **Example usage:**
 ```bash
 uv run gemini_client.py --video=camera --responses=TEXT --active-muting=false
+uv run gemini_client.py --responses=AUDIO --mute-mic=true
 ```
 Type `q` + Enter to quit.
 
@@ -136,4 +141,3 @@ See [Turtlesim Tutorial](../../1_turtlesim/README.md) for more examples.
 Contributed by Trace LaRue
 traceglarue@gmail.com
 [www.traceglarue.com](https://www.traceglarue.com)
-
