@@ -316,10 +316,12 @@ class TerminalUI:
         self._render_task = None
         self._input_queue = asyncio.Queue()
         self._input_buffer = ""
+        self._pending_escape = ""
         self._events = []
         self._status = "Initializing..."
         self._active = False
         self._max_events = 400
+        self._scroll_offset = 0
 
     async def start(self):
         """Enter alternate-screen mode and start the render loop."""
@@ -365,6 +367,11 @@ class TerminalUI:
         self._events.append((str(title), str(detail)))
         if len(self._events) > self._max_events:
             self._events = self._events[-self._max_events :]
+        if self._scroll_offset > 0:
+            self._scroll_offset = min(
+                self._scroll_offset + 1,
+                max(0, len(self._events) - 1),
+            )
 
     async def next_input(self):
         """Return the next submitted input line."""
@@ -377,7 +384,27 @@ class TerminalUI:
         except OSError:
             return
 
-        for ch in chars:
+        self._pending_escape += chars
+        while self._pending_escape:
+            if self._pending_escape.startswith("\x1b"):
+                if len(self._pending_escape) == 1:
+                    return
+                if self._pending_escape[1] != "[":
+                    self._pending_escape = self._pending_escape[1:]
+                    continue
+                if len(self._pending_escape) < 3:
+                    return
+
+                sequence = self._pending_escape[:3]
+                if sequence == "\x1b[A":
+                    self._scroll_feed(1)
+                elif sequence == "\x1b[B":
+                    self._scroll_feed(-1)
+                self._pending_escape = self._pending_escape[3:]
+                continue
+
+            ch = self._pending_escape[0]
+            self._pending_escape = self._pending_escape[1:]
             if ch in ("\n", "\r"):
                 self._input_queue.put_nowait(self._input_buffer)
                 self._input_buffer = ""
@@ -405,7 +432,7 @@ class TerminalUI:
                 "Gemini Live Console",
                 [
                     (
-                        "Type a message and press Enter. Press q and Enter to quit.",
+                        "Type a message and press Enter. Use Up/Down to scroll. Press q and Enter to quit.",
                         self.MUTED,
                     ),
                     (self._truncate("> " + self._input_buffer, cols - 6), self.INPUT),
@@ -432,7 +459,21 @@ class TerminalUI:
                 )
         if not rendered:
             rendered = [("Waiting for session activity...", self.MUTED)]
-        return rendered[-max_lines:]
+            self._scroll_offset = 0
+            return rendered[-max_lines:]
+
+        max_offset = max(0, len(rendered) - max_lines)
+        self._scroll_offset = min(self._scroll_offset, max_offset)
+        end = len(rendered) - self._scroll_offset
+        start = max(0, end - max_lines)
+        return rendered[start:end]
+
+    def _scroll_feed(self, direction):
+        """Move the activity feed viewport up or down."""
+        if not self._events:
+            self._scroll_offset = 0
+            return
+        self._scroll_offset = max(0, self._scroll_offset + direction)
 
     def _wrap_lines(self, text, width):
         chunks = []
